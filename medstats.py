@@ -80,7 +80,6 @@ Compare arrays processed by some stats functions (means, medians, centiles, R2, 
 Returns median of p-value with 2.5, 97.5% centiles
 """
 
-@delayed
 def bs_multi(a,b, func, R = 100):
     t = func(a) - func(b)
     B = np.empty(shape = R)
@@ -116,7 +115,6 @@ Percentile comparison. I.e. compare arrays a,b by 25%.
 Returns median of p-value with 2.5, 97.5% centiles
 """
 
-@delayed
 def bs_perc(a,b, perc, R = 100):
     t = np.percentile(a, [perc]) - np.percentile(b, [perc])
     B = np.empty(shape = R)
@@ -152,7 +150,7 @@ inv_n - number of patients in treatment group
 plac - share in control group, aka 0.55
 plac_n - number of patients in control group
 """    
-@delayed
+
 def bs_props(inv, inv_n, plac, plac_n, R=100):
     diff = inv - plac
     ni = (np.array(inv*inv_n)).astype(int)
@@ -212,7 +210,6 @@ Returns variable type, N of patients, median, centiles or share%
 
 """
 
-@delayed
 def summary(df):
     summarize = pd.DataFrame()
     for col in df:
@@ -250,7 +247,7 @@ save_tab enables xlsx export
 
 @delayed requires .compute() method
 """
-@delayed
+
 def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', save_tab = False):
 
     x = df.loc[df[group] == gr_id_1]
@@ -298,7 +295,7 @@ Vars must be dummified!!!
 pmin - significance level
 
 """
-@delayed
+
 def regr_onedim(df, group, signif_only = False, pmin = 0.05, save_tab = False):
 
     reg_data = df.drop(columns=group)
@@ -342,7 +339,7 @@ y - in format df.y, must be dummified
 
 """
 
-@delayed
+
 def backwise(df, lst, y, steps = 100, pmin = 0.05):
     lst = lst
     X = df[lst]
