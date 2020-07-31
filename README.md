@@ -6,7 +6,7 @@ Python module for medical statistics. This bunch of functions is dedicated to me
 
 ### Import from google sheets:
 
-- `import_gsheet` - imports gsheet table into workflow when working in Colab. U need to authenticate into your google account with
+- `import_gsheet` - imports gsheet table into workflow **when working in Colab**. To use the function you need to authenticate into your Google account with
 
 ```
 from google.colab import auth
