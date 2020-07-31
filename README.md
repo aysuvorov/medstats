@@ -10,8 +10,8 @@ Python module for medical statistics. This bunch of functions is dedicated to me
 
 ### Sample size:
 
-- `prop_size` - calculate sample size with 2 known proportions
-- `mean_size` - calculate sample size with 2 known means
+- `prop_size` - calculates sample size with 2 known proportions
+- `mean_size` - calculates sample size with 2 known means
 - `cdf` - computes CDF
 
 ### Bootstrap comparison:
@@ -23,7 +23,7 @@ Python module for medical statistics. This bunch of functions is dedicated to me
 ### Table statistics and stuff - working with simple databases:
 
 - `dummification` - creates dummies and deletes original vars 
-- `summ_tab` - provides simple summary table with var types (numeric / category) By default numerics are medians with 25/75%. Working on this func to make fivenum stats
+- `summary` - provides simple summary table with var types (numeric / category).
 - `compare` - statistical comparison between 2 groups. By default numerics compared using Mann-Whitney, shares - with Fisher exact test
 - `regr_onedim` - provides one-dimensional logistic regression analysis
 - `backwise` - provides backwise selection model
