@@ -46,7 +46,7 @@ def prop_size(p1, p2, alpha = 0.05, beta = 0.8, k = 1):
     n1 = m.ceil((0.5 * n * (1 + k)))
     n2 = m.ceil((0.5 * n * (1 + (1/k))))
     group = n1 + n2
-    return print("В настоящем исследовании в группе `Препарат` требуется "  + str(n1) + " пациентов, группе `Плацебо` - "  + str(n2) + ", во всей группе - " + str(group)).compute()
+    return print("В настоящем исследовании в группе `Препарат` требуется "  + str(n1) + " пациентов, группе `Плацебо` - "  + str(n2) + ", во всей группе - " + str(group))
 
 """
 Sample size for means
@@ -60,7 +60,7 @@ def mean_size(m1, m2, sd1, sd2, alpha = 0.05, beta = 0.8, k = 1):
     n1 = m.ceil((0.5 * n * (1 + k)))
     n2 = m.ceil((0.5 * n * (1 + (1/k))))
     group = n1 + n2
-    return print("В настоящем исследовании в группе `Препарат` требуется "  + str(n1) + " пациентов, группе `Плацебо` - "  + str(n2) + ", во всей группе - " + str(group)).compute()
+    return print("В настоящем исследовании в группе `Препарат` требуется "  + str(n1) + " пациентов, группе `Плацебо` - "  + str(n2) + ", во всей группе - " + str(group))
 
 
 """
@@ -80,6 +80,7 @@ Compare arrays processed by some stats functions (means, medians, centiles, R2, 
 Returns median of p-value with 2.5, 97.5% centiles
 """
 
+@delayed
 def bs_multi(a,b, func, R = 100):
     t = func(a) - func(b)
     B = np.empty(shape = R)
@@ -115,6 +116,7 @@ Percentile comparison. I.e. compare arrays a,b by 25%.
 Returns median of p-value with 2.5, 97.5% centiles
 """
 
+@delayed
 def bs_perc(a,b, perc, R = 100):
     t = np.percentile(a, [perc]) - np.percentile(b, [perc])
     B = np.empty(shape = R)
@@ -150,7 +152,7 @@ inv_n - number of patients in treatment group
 plac - share in control group, aka 0.55
 plac_n - number of patients in control group
 """    
-
+@delayed
 def bs_props(inv, inv_n, plac, plac_n, R=100):
     diff = inv - plac
     ni = (np.array(inv*inv_n)).astype(int)
@@ -211,7 +213,7 @@ Returns variable type, N of patients, median, centiles or share%
 """
 
 @delayed
-def summ_tab(df):
+def summary(df):
     summarize = pd.DataFrame()
     for col in df:
         J = len(list(df.columns))
@@ -221,19 +223,20 @@ def summ_tab(df):
                 var = 'Категориальная'
                 n = np.sum(df[col])
                 percents = round(n / len(df[col])*100, 1)
-                med = '-'
-                centiles0 = '-'
-                centiles1 = '-'
+                med = centiles0 = centiles1 = avg = sd = minn = maxx = sh = '-'
             else:
                 v = df[col].name
                 var = 'Числовая'
                 n = len(df[col])
                 percents = '-'
-                med = round(np.median(df[col]), 2)
-                centiles0 = round(np.percentile(df[col], [25, 75])[0], 2)
-                centiles1 = round(np.percentile(df[col], [25, 75])[1], 2)
-        summarize = summarize.append({'Фактор': v, 'Тип': var, 'Количество': n, 'Доля, %': percents,'Медиана': med, '25%': centiles0, '75%': centiles1}, ignore_index=True)
-        summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Медиана', '25%', '75%'])
+                flist = (np.mean, np.std, np.min, np.max, np.median)
+                avg, sd, minn, maxx, med = [f(df[col]) for f in flist]
+                centiles0 = round(np.percentile(df[col], 25), 2)
+                centiles1 = round(np.percentile(df[col], 75), 2)
+                sh = round(shapiro(df[col])[1], 3)
+        summarize = summarize.append({'Фактор': v, 'Тип': var, 'Количество': n, 'Доля, %': percents,'Медиана': med, '25%': centiles0, '75%': centiles1, 'Среднее': avg , 'Ст.отклон':  sd, \
+                                      'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
+        summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Мин','25%', 'Медиана', '75%', 'Макс', 'Среднее','Ст.отклон', 'Критерий Шапиро-Уилка, р'])
     return summarize
 
 """
