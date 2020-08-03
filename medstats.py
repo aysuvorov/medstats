@@ -400,7 +400,7 @@ def cox_onedim(df, group, time, save_tab = False):
         p = round(model.summary.iloc[:,8][0], 3)
         conf0 = round(model.summary.iloc[:,5][0], 2)
         conf1 = round(model.summary.iloc[:,6][0], 2)
-        coxregr = coxregr.append({'Names': v, 'HR': HR, 'lower': conf0, 'upper': conf1,'p_val': p}, ignore_index=True)
+        coxregr = coxregr.append({'Фактор': v, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
     
     coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
 	
