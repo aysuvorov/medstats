@@ -12,6 +12,7 @@ import pandas as pd
 import scipy.stats as st
 import math as m
 import statsmodels as sm
+import statsmodels.api as sma
 import gspread
 
 from sklearn.utils import resample
@@ -330,48 +331,6 @@ def regr_onedim(df, group, signif_only = False, pmin = 0.05, save_tab = False):
         return logregr
         
 """
-Backwise selection of factors
-
-lst - list of significant vars. 
-pmin - significance level
-steps - minimal steps for selection
-y - in format df.y, must be dummified
-
-"""
-
-
-def backwise(df, lst, y, steps = 100, pmin = 0.05):
-    lst = lst
-    X = df[lst]
-    y = y
-    n = len(lst)
-    pmax = 1
-    steps = steps
-
-    for i in range(steps):
-        if pmax > pmin:
-            X = df[lst]
-            model = sm.GLM(y, sm.add_constant(X), family = sm.families.Binomial()).fit()
-            pvalues = model.pvalues.iloc[1:].sort_values()
-            pmax = pvalues[-1]
-            out = pvalues.index[-1]
-            lst.remove(out)
-        else:
-            break
-
-    S = sm.add_constant(df[list(pvalues.index)])
-
-    result=sm.GLM(y, S, family = sm.families.Binomial()).fit()
-    v = S.columns
-    OR = np.exp(np.array(result.params))
-    upper = np.exp(np.array(result.conf_int()[0]))
-    lower = np.exp(np.array(result.conf_int()[1]))
-    p_val = list(result.pvalues)
-
-    stepwise = (pd.DataFrame({'Фактор': v, 'ОШ': OR, 'Верхний 95% ДИ' : upper, 'Нижний 95% ДИ':lower, 'Значимость, p':p_val})).reindex(columns=['Фактор', 'ОШ', 'Верхний 95% ДИ', 'Нижний 95% ДИ', 'Значимость, p'])
-    return stepwise
-
-"""
 ROC threshold cut offs calculations
 
 SAPLE:
@@ -443,7 +402,7 @@ def cox_onedim(df, group, time, save_tab = False):
         conf1 = round(model.summary.iloc[:,6][0], 2)
         coxregr = coxregr.append({'Names': v, 'HR': HR, 'lower': conf0, 'upper': conf1,'p_val': p}, ignore_index=True)
     
-    coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'lower', 'upper', 'p_val'])
+    coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
 	
     if save_tab == True:
         return pd.DataFrame.to_excel(coxregr, 'Регрессия Кокса, одномерный анализ.xlsx')
@@ -451,3 +410,79 @@ def cox_onedim(df, group, time, save_tab = False):
         return coxregr
 
     return coxregr
+
+"""
+Backwise selection model
+
+lst - list of significant vars. 
+pmin - significance level
+steps - minimal steps for selection
+group - in format 'GROUP', must be dummified
+family - 'logistic' or 'cox'
+
+"""
+
+def backwise(df, lst, group, time = 0, family = 'logistic', steps = 100, pmin = 0.05):
+    if family == 'logistic':
+        lst = lst
+        X = df[lst]
+        y = df[group]
+        n = len(lst)
+        pmax = 1
+        steps = steps
+
+        for i in range(steps):
+            if pmax > pmin:
+                X = df[lst]
+                model = sm.GLM(y, sma.add_constant(X), family = sma.families.Binomial()).fit()
+                pvalues = model.pvalues.iloc[1:].sort_values()
+                pmax = pvalues[-1]
+                out = pvalues.index[-1]
+                lst.remove(out)
+            else:
+                break
+
+        S = sm.add_constant(df[list(pvalues.index)])
+
+        result=sma.GLM(y, S, family = sma.families.Binomial()).fit()
+        v = S.columns
+        OR = round(np.exp(result.params),1)
+        upper = round(np.exp(result.conf_int()[0]),1)
+        lower = round(np.exp(result.conf_int()[1]),1)
+        p_val = round(result.pvalues,3)
+
+        stepwise = (pd.DataFrame({'Фактор': v, 'ОШ': OR, 'Верхний 95% ДИ' : upper, 'Нижний 95% ДИ':lower, 'Значимость, p':p_val})).reindex(columns=['Фактор', 'ОШ', 'Верхний 95% ДИ', 'Нижний 95% ДИ', 'Значимость, p'])
+        return stepwise
+
+    elif family =='cox':
+        X = df[lst]
+        X[[time]] = df[[time]]
+        X[[group]] = df[[group]]
+        pmax = 1
+        steps = steps
+        cph = CoxPHFitter()
+
+        for i in range(steps):
+            if pmax > pmin:
+                X = df[lst]
+                X[[group]] = df[[group]]
+                X[[time]] = df[[time]]
+                model = cph.fit(X, duration_col=time, event_col=group)
+                pvalues = model.summary.iloc[:,8].sort_values()
+                pmax = pvalues[-1]
+                out = pvalues.index[-1]
+                lst.remove(out)
+            else:
+                break
+
+        result=cph.fit(X, duration_col=time, event_col=group)
+        HR = round(result.hazard_ratios_, 2).to_frame()
+        p = round(result.summary.iloc[:,8], 3).to_frame()
+        conf0 = round(result.summary.iloc[:,5], 2).to_frame()
+        conf1 = round(result.summary.iloc[:,6], 2).to_frame()
+        back = pd.concat([HR, conf0, conf1, p], axis = 1).reset_index()
+        back.columns = ['Фактор','HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'Значимость, р']
+        return back
+
+    else:
+        print('ERROR: family must be logistic or cox')
