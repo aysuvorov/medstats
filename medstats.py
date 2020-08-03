@@ -333,7 +333,15 @@ def regr_onedim(df, group, signif_only = False, pmin = 0.05, save_tab = False):
 """
 ROC threshold cut offs calculations
 
-SAPLE:
+df - core data frame
+vars - list of vars of interest 
+group - target var, as 'GROUP'
+time - time var as 'TIME'
+group - in format 'GROUP', must be dummified
+family - 'logistic' or 'cox'
+
+
+EXAMPLE:
 roc_cut(df, ['var1', 'var2', 'var3'], ['group_var'])
 
 """
@@ -344,19 +352,40 @@ def roc_job(pred, predictor, pos):
     d['cut'] = predictor
     return d[d['prob'] == pos].iloc[0,1]
 
-def roc_cut(df, vars, group, save_tab = False):
-    
-    table = df[vars]
-    group = df[group]
-
+def roc_cut(df, vars, group, time = 0, family = 'logistic', save_tab = False):
     roc_cut = pd.DataFrame()
 
-    for col in table:
-        J = len(list(table.columns))
-        for j in range(J):
+    if family == 'logistic':
+        table = df[vars]
+        y = df[group]
+        for col in table:
+            J = len(list(table.columns))
+            for j in range(J):
+                v = table[col].name
+                pred = sma.GLM(y, sma.add_constant(table[col]), family = sma.families.Binomial()).fit().predict(sma.add_constant(table[col]))
+                fpr, tpr, thresholds =roc_curve(y, pred)
+                r = round(auc(fpr, tpr)*100, 1) #AUC
+                i = np.arange(len(tpr))
+
+                roc = pd.DataFrame({'fpr' : pd.Series(fpr, index=i),'tpr' : pd.Series(tpr, index = i), '1-fpr' : pd.Series(1-fpr, index = i), 'tf' : pd.Series(tpr - (1-fpr), index = i), 'thresholds' : pd.Series(thresholds, index = i)})
+                roc = roc.iloc[(roc.tf-0).abs().argsort()[:1]]
+                thres = roc.iloc[0,4]
+                sens = round(roc.iloc[0,1]*100, 1) #sensetivity
+                spec = round(roc.iloc[0,2]*100, 1) #specifisity
+                cut = roc_job(pred, predictor = table[col], pos = thres).compute()
+            roc_cut = roc_cut.append({'Фактор': v, 'AUC, %': r, 'Порог': cut,'Чувствительность, %': sens, 'Специфичность, %':spec}, ignore_index=True)
+
+    elif family == 'cox':
+        cph = CoxPHFitter()
+        table = df[vars]  
+        table[time] = df[time]
+        table[group] = df[group]
+        for col in table.columns[:-2]:
             v = table[col].name
-            pred = sm.GLM(group, sm.add_constant(table[col]), family = sm.families.Binomial()).fit().predict(sm.add_constant(table[col]))
-            fpr, tpr, thresholds =roc_curve(y, pred)
+            cph.fit(table[[col, group, time]], duration_col=time, event_col=group)
+            pred = cph.predict_survival_function(table[[col]], np.percentile(df[[time]],0.99)).T
+
+            fpr, tpr, thresholds =roc_curve(table[group], pred)
             r = round(auc(fpr, tpr)*100, 1) #AUC
             i = np.arange(len(tpr))
 
@@ -365,9 +394,11 @@ def roc_cut(df, vars, group, save_tab = False):
             thres = roc.iloc[0,4]
             sens = round(roc.iloc[0,1]*100, 1) #sensetivity
             spec = round(roc.iloc[0,2]*100, 1) #specifisity
-            cut = roc_job(pred, predictor = table[col], pos = thres).compute()
-        
-        roc_cut = roc_cut.append({'Фактор': v, 'AUC, %': r, 'Порог': cut,'Чувствительность, %': sens, 'Специфичность, %':spec}, ignore_index=True)
+            cut = roc_job(pred[0], predictor = table[col], pos = thres).compute()
+            roc_cut = roc_cut.append({'Фактор': v, 'AUC, %': r, 'Порог': cut,'Чувствительность, %': sens, 'Специфичность, %':spec}, ignore_index=True)     
+
+    else:
+        print('Error')
 
     roc_cut = roc_cut.reindex(columns=['Фактор', 'AUC, %', 'Порог','Чувствительность, %', 'Специфичность, %'])
 
