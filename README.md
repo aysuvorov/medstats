@@ -31,9 +31,12 @@ auth.authenticate_user()
 - `summary` - provides simple summary table with var types (numeric / category).
 - `compare` - statistical comparison between 2 groups. By default numerics compared using Mann-Whitney, shares - with Fisher exact test
 - `regr_onedim` - provides one-dimensional logistic regression analysis
-- `backwise` - provides backwise selection model
-- `roc_cut` - calculates cut-offs thresholds for significant numeric factors in regression analysis
 
 ### Survival
 
 - `cox_onedim` - onedimensional Cox regressions over every variable in data frame
+
+### Models and quality
+
+- `backwise` - provides backwise selection model in logistic and Cox regressions
+- `roc_cut` - calculates cut-offs thresholds for significant numeric factors in regression analysis
