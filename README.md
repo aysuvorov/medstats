@@ -38,5 +38,5 @@ auth.authenticate_user()
 
 ### Models and quality
 
-- `backwise` - provides backwise selection model in logistic and Cox regressions
+- `backwise` - provides backwise selection model in logistic regressions
 - `roc_cut` - calculates cut-offs thresholds for significant numeric factors in regression analysis
