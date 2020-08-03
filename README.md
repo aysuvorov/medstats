@@ -33,3 +33,7 @@ auth.authenticate_user()
 - `regr_onedim` - provides one-dimensional logistic regression analysis
 - `backwise` - provides backwise selection model
 - `roc_cut` - calculates cut-offs thresholds for significant numeric factors in regression analysis
+
+### Survival
+
+- `cox_onedim` - onedimensional Cox regressions over every variable in data frame
