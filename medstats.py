@@ -15,7 +15,7 @@ import statsmodels as sm
 import gspread
 
 from sklearn.utils import resample
-from sklearn.metrics import roc_curve
+from sklearn.metrics import roc_curve, auc
 from dask import delayed
 from scipy.stats import shapiro, ttest_ind, mannwhitneyu, fisher_exact, chi2_contingency, kruskal
 from oauth2client.client import GoogleCredentials
@@ -372,25 +372,49 @@ def backwise(df, lst, y, steps = 100, pmin = 0.05):
     return stepwise
 
 """
-ROC threshold cut offs calculations - ugly version
+ROC threshold cut offs calculations
 
-SAMPLE:
-for col in X:
-    if len(pd.unique(X[col])) > 2:
-        res = roc_cut(df[['GROUP']], X[col])
-        print(str(res) + str(X[col].name))
-    else:
-        print("......."+ str(X[col].name))
+SAPLE:
+roc_cut(df, ['var1', 'var2', 'var3'], ['group_var'])
 
 """
-
-def roc_cut(real, predictor):
-    pred = sm.GLM(real, sm.add_constant(predictor), family = sm.families.Binomial()).fit().predict(sm.add_constant(predictor))
-    fpr, tpr, thresholds =roc_curve(y, pred)
-    i = np.arange(len(tpr))
-    roc = pd.DataFrame({'fpr' : pd.Series(fpr, index=i),'tpr' : pd.Series(tpr, index = i), '1-fpr' : pd.Series(1-fpr, index = i), 'tf' : pd.Series(tpr - (1-fpr), index = i), 'thresholds' : pd.Series(thresholds, index = i)})
-    thres = roc.iloc[(roc.tf-0).abs().argsort()[:1]].iloc[0,4]
+@delayed
+def roc_job(pred, predictor, pos):
     d = pd.DataFrame()
     d['prob'] = pred
     d['cut'] = predictor
-    print("Threshold is: %f" % d[d['prob'] == thres].iloc[0,1])
+    return d[d['prob'] == pos].iloc[0,1]
+
+def roc_cut(df, vars, group, save_tab = False):
+    
+    table = df[vars]
+    group = df[group]
+
+    roc_cut = pd.DataFrame()
+
+    for col in table:
+        J = len(list(table.columns))
+        for j in range(J):
+            v = table[col].name
+            pred = sm.GLM(group, sm.add_constant(table[col]), family = sm.families.Binomial()).fit().predict(sm.add_constant(table[col]))
+            fpr, tpr, thresholds =roc_curve(y, pred)
+            r = round(auc(fpr, tpr)*100, 1) #AUC
+            i = np.arange(len(tpr))
+
+            roc = pd.DataFrame({'fpr' : pd.Series(fpr, index=i),'tpr' : pd.Series(tpr, index = i), '1-fpr' : pd.Series(1-fpr, index = i), 'tf' : pd.Series(tpr - (1-fpr), index = i), 'thresholds' : pd.Series(thresholds, index = i)})
+            roc = roc.iloc[(roc.tf-0).abs().argsort()[:1]]
+            thres = roc.iloc[0,4]
+            sens = round(roc.iloc[0,1]*100, 1) #sensetivity
+            spec = round(roc.iloc[0,2]*100, 1) #specifisity
+            cut = roc_job(pred, predictor = table[col], pos = thres).compute()
+        
+        roc_cut = roc_cut.append({'Фактор': v, 'AUC, %': r, 'Порог': cut,'Чувствительность, %': sens, 'Специфичность, %':spec}, ignore_index=True)
+
+    roc_cut = roc_cut.reindex(columns=['Фактор', 'AUC, %', 'Порог','Чувствительность, %', 'Специфичность, %'])
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(roc_cut, 'Пороги по ROC-анализу.xlsx')
+    else:
+        return roc_cut
+
+    return roc_cut
