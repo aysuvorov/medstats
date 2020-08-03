@@ -418,3 +418,36 @@ def roc_cut(df, vars, group, save_tab = False):
         return roc_cut
 
     return roc_cut
+
+"""
+One dimensional Cox regression analysis
+
+EXAPLE:
+cox_onedim(df, 'DEATH', 'TIME')
+
+"""
+
+def cox_onedim(df, group, time, save_tab = False):
+
+    reg_data = df.drop(columns=[group, time])
+    cph = CoxPHFitter()
+
+    coxregr = pd.DataFrame()
+
+    for col in reg_data:
+        v = reg_data[col].name
+        model = cph.fit(df[[col, group, time]], duration_col=time, event_col=group)
+        HR = round(model.hazard_ratios_[0], 2)
+        p = round(model.summary.iloc[:,8][0], 3)
+        conf0 = round(model.summary.iloc[:,5][0], 2)
+        conf1 = round(model.summary.iloc[:,6][0], 2)
+        coxregr = coxregr.append({'Names': v, 'HR': HR, 'lower': conf0, 'upper': conf1,'p_val': p}, ignore_index=True)
+    
+    coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'lower', 'upper', 'p_val'])
+	
+    if save_tab == True:
+        return pd.DataFrame.to_excel(coxregr, 'Регрессия Кокса, одномерный анализ.xlsx')
+    else:
+        return coxregr
+
+    return coxregr
