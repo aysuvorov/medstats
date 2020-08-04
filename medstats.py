@@ -323,8 +323,8 @@ def regr_onedim(df, group, signif_only = False, pmin = 0.05, save_tab = False):
         J = len(g)
         for j in range(J):
             v = reg_data[col].name
-            X= sm.add_constant(reg_data[col])
-            logit_model=sm.GLM(y,X, family = sm.families.Binomial())
+            X= sma.add_constant(reg_data[col])
+            logit_model=sma.GLM(y,X, family = sma.families.Binomial())
             result=logit_model.fit()
             params = round(np.exp(result.params)[1], 1)
             conf0 = round(np.exp(result.conf_int())[0][1],2)
@@ -478,7 +478,7 @@ def backwise(df, lst, group, time = 0, family = 'logistic', steps = 100, pmin = 
         for i in range(steps):
             if pmax > pmin:
                 X = df[lst]
-                model = sm.GLM(y, sma.add_constant(X), family = sma.families.Binomial()).fit()
+                model = sma.GLM(y, sma.add_constant(X), family = sma.families.Binomial()).fit()
                 pvalues = model.pvalues.iloc[1:].sort_values()
                 pmax = pvalues[-1]
                 out = pvalues.index[-1]
@@ -486,7 +486,7 @@ def backwise(df, lst, group, time = 0, family = 'logistic', steps = 100, pmin = 
             else:
                 break
 
-        S = sm.add_constant(df[list(pvalues.index)])
+        S = sma.add_constant(df[list(pvalues.index)])
 
         result=sma.GLM(y, S, family = sma.families.Binomial()).fit()
         v = S.columns
