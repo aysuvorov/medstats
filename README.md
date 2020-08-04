@@ -12,6 +12,10 @@ Python module for medical statistics. This bunch of functions is dedicated to me
 from google.colab import auth
 auth.authenticate_user()
 ```
+As arguments you should pass table key:
+
+https://docs.google.com/spreadsheets/d/`1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan3T1dkS0`/edit#gid=12556364 as '1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan3T1dkS0' and sheet number.
+
 ### Misc
 
 - `filler` - fills NaN with `mean` / `median` / `interpolate`. Translates columns to numerics.
