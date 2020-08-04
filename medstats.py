@@ -22,6 +22,18 @@ from scipy.stats import shapiro, ttest_ind, mannwhitneyu, fisher_exact, chi2_con
 from oauth2client.client import GoogleCredentials
 
 """
+Fills NaN using func - mean, median, interpolate
+
+(Simple imputer)
+"""
+def filler(df, func):
+	for col in df:
+		df[col].apply(pd.to_numeric, errors='coerce')
+
+	df = df.fillna(df.func())
+	return df
+
+"""
 Importer from google docs using table key and sheet number (0,1,2...)
 
 """
