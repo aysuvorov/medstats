@@ -12,6 +12,9 @@ Python module for medical statistics. This bunch of functions is dedicated to me
 from google.colab import auth
 auth.authenticate_user()
 ```
+### Misc
+
+- `filler` - fills NaN with `mean` / `median` / `interpolate`. Translates columns to numerics.
 
 ### Sample size:
 
