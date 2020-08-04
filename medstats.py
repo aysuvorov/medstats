@@ -342,7 +342,67 @@ def regr_onedim(df, group, signif_only = False, pmin = 0.05, save_tab = False):
         return pd.DataFrame.to_excel(logregr, 'Одномерный регрессионный анализ.xlsx')
     else:
         return logregr
-        
+
+"""
+One-dimensional regression analysis with sex and age adjustment
+
+You shoild provide sex and age columns
+
+UNDER DEVELOPMENT!
+
+"""
+def regr_onedim_adj(df, group, age_col, sex_col, signif_only = False, pmin = 0.05, save_tab = False):
+
+    reg_data = df.drop(columns=group)
+    y = df[[group]]
+
+    logregr = pd.DataFrame()
+
+    g = reg_data.columns #[1:-1]
+
+    for col in g:
+        J = len(g)
+        for j in range(J):
+            v = reg_data[col].name
+            logit_model=sma.GLM(y,sma.add_constant(reg_data[[col, age_col, sex_col]]), family = sma.families.Binomial())
+            result=logit_model.fit()
+            params = round(np.exp(result.params)[1], 1)
+            conf0 = round(np.exp(result.conf_int())[0][1],2)
+            conf1 = np.exp(result.conf_int())[1][1]
+            p = round(result.pvalues[1], 3)
+        logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': p}, ignore_index=True)
+        logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])    
+
+    if signif_only == True:
+        logregr = logregr[logregr['p_val'] < pmin]
+    else:
+        pass
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(logregr, 'Одномерный регрессионный анализ.xlsx')
+    else:
+        return logregr
+
+"""
+Multivariate regression for logistic regression
+
+"""
+def regr_multi(df, group, lst, save_tab = False):
+    logit_model=sma.GLM(df[group],sma.add_constant(df[lst]), family = sma.families.Binomial())
+    result=logit_model.fit()
+    params = round(np.exp(result.params)[1:],2)
+    names = params.index
+    conf0 = round(np.exp(result.conf_int())[1:][0],2)
+    conf1 = round(np.exp(result.conf_int())[1:][1],2)
+    p = round(result.pvalues[1:],3)
+    multivar = pd.DataFrame({'Names': names, 'OR': params, 'lower': conf0, 'upper': conf1,'p_val': p})
+    multivar.reset_index().iloc[:, 1:]
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(multivar, 'Многомерный регрессионный анализ.xlsx')
+    else:
+        return multivar
+
 """
 ROC threshold cut offs calculations
 
