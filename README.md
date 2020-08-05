@@ -37,11 +37,11 @@ https://docs.google.com/spreadsheets/d/`1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan
 - `dummification` - creates dummies and deletes original vars 
 - `summary` - provides simple summary table with var types (numeric / category).
 - `compare` - statistical comparison between 2 groups. By default numerics compared using Mann-Whitney, shares - with Fisher exact test
-- `regr_onedim` - provides one-dimensional logistic regression analysis
+- `regr_onedim` - provides one-dimensional logistic regression analysis. Sex and Age adjustment is available.
 
 ### Survival
 
-- `cox_onedim` - onedimensional Cox regressions over every variable in data frame
+- `cox_onedim` - onedimensional Cox regressions over every variable in data frame. Sex and Age adjustment is available.
 
 ### Models and quality
 
