@@ -1,6 +1,6 @@
 # M a n u a l
 
-## Importthis repo from git
+## Import this repo from git
 
 You can use
 ```
