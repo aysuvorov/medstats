@@ -95,6 +95,25 @@ Compare arrays processed by some stats functions (means, medians, centiles, R2, 
 Returns median of p-value with 2.5, 97.5% centiles
 """
 
+@jit
+def bs_multi_job_rand(x, y):
+    b = np.random.choice(x, len(y))
+    return b
+@jit
+def bs_multi_job_perm(x,y):
+    b = np.random.permutation(np.concatenate((x, y)))
+    return b
+
+
+def bs_multi_job(a_shifted, a, b_shifted, b, func):
+    a_bs = bs_multi_job_rand(a_shifted, a)
+    b_bs = bs_multi_job_rand(b_shifted, b)
+    permuted_data = bs_multi_job_perm(a_bs, b_bs)
+    perm_sample_1 = permuted_data[:len(a)]
+    perm_sample_2 = permuted_data[len(a):]
+    g = func(perm_sample_1) - func(perm_sample_2)
+    return g
+
 def bs_multi(a,b, func, R = 100):
     t = func(a) - func(b)
     B = np.empty(shape = R)
@@ -107,12 +126,7 @@ def bs_multi(a,b, func, R = 100):
 
     for val in range(R):
         for i in range(R):
-            a_bs = np.random.choice(a_shifted, len(a))
-            b_bs = np.random.choice(b_shifted, len(b))
-            permuted_data = np.random.permutation(np.concatenate((a_bs, b_bs))) 
-            perm_sample_1 = permuted_data[:len(a)]
-            perm_sample_2 = permuted_data[len(a):]
-            B[i] = func(perm_sample_1) - func(perm_sample_2)
+            B[i] = bs_multi_job(a_shifted, a, b_shifted, b, func)
         p[val] = (np.sum(abs(B) >= abs(t)) / (R+1))
     return(np.percentile(p, [2.5, 50, 97.5]))
 
@@ -265,13 +279,14 @@ save_tab enables xlsx export
 
 def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', save_tab = False):
 
-    x = df.loc[df[group] == gr_id_1]
-    y = df.loc[df[group] == gr_id_2]
+    x = df.loc[df[group] == gr_id_1].drop(columns = group)
+    y = df.loc[df[group] == gr_id_2].drop(columns = group)
 
     comparison = pd.DataFrame()
+    sep = ''
 
-    for col in df:
-        J = len(list(df.columns))
+    for col in x:
+        J = len(list(x.columns))
         for j in range(J):
             if len(np.unique(df[col])) < 3:
                 v = df[col].name 
@@ -282,8 +297,8 @@ def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name
                 obs = np.array([[gr1obs, gr2obs], [gr1exp, gr2exp]])
                 # в таблицу идут:
                 p_val = round(fisher_exact(obs)[1], 3)
-                p1 = str(round(gr1obs/len(x[col])*100,1)) + " %" + " (" + str(gr1obs) +")"
-                p2 = str(round(gr2obs/len(y[col])*100,1)) + " %" + " (" + str(gr2obs) +")"
+                p1 = sep.join([str(round(gr1obs/len(x[col])*100,1)), " %", " (", str(gr1obs),")"])
+                p2 = sep.join([str(round(gr2obs/len(y[col])*100,1)), " %", " (", str(gr2obs), ")"])
             else:
                 v = df[col].name
                 gr1obs = round(np.median(x[col]),2)
@@ -292,8 +307,8 @@ def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name
                 cent2 = np.percentile(y[col], [25,75])
                 # в таблицу идут:
                 p_val = round(mannwhitneyu(x[col], y[col])[1], 3)
-                p1 = str(gr1obs) + " (" + str(round(cent1[0],2)) + "; " + str(round(cent1[1],2)) + ")"
-                p2 = str(gr2obs) + " (" + str(round(cent2[0],2)) + "; " + str(round(cent2[1],2)) + ")"
+                p1 = sep.join([str(gr1obs), " (", str(round(cent1[0],2)), "; ", str(round(cent1[1],2)), ")"])
+                p2 = sep.join([str(gr2obs), " (", str(round(cent2[0],2)), "; ", str(round(cent2[1],2)), ")"])
         comparison = comparison.append({'Фактор': v, name_1: p1, name_2: p2,'p_val': p_val}, ignore_index=True)
         comparison = comparison.reindex(columns=['Фактор', name_1, name_2, 'p_val'])
 
@@ -307,72 +322,44 @@ One-dimensional regression analysis
 
 Vars must be dummified!!!
 
-pmin - significance level
+adjustment - you can provide Age and Gender adjustment, if needed
 
 """
 
-def regr_onedim(df, group, signif_only = False, pmin = 0.05, save_tab = False):
+def regr_onedim(df, group, adjusted = False, signif_only = False, age_col = 1, sex_col = 1, save_tab = False):
 
     reg_data = df.drop(columns=group)
     y = df[[group]]
-
     logregr = pd.DataFrame()
 
-    g = reg_data.columns[1:-1]
+    if adjusted == False:
+        for col in reg_data.columns:
+            J = len(reg_data.columns)
+            for j in range(J):
+                v = reg_data[col].name
+                logit_model=sma.GLM(y,sma.add_constant(reg_data[[col]]), family = sma.families.Binomial())
+                result=logit_model.fit()
+                params = round(np.exp(result.params)[1], 2)
+                conf0 = round(np.exp(result.conf_int())[0][1],2)
+                conf1 = round(np.exp(result.conf_int())[1][1],2)
+                p = round(result.pvalues[1], 3)
+            logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': p}, ignore_index=True)
+            logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val']) 
 
-    for col in g:
-        J = len(g)
-        for j in range(J):
-            v = reg_data[col].name
-            X= sma.add_constant(reg_data[col])
-            logit_model=sma.GLM(y,X, family = sma.families.Binomial())
-            result=logit_model.fit()
-            params = round(np.exp(result.params)[1], 1)
-            conf0 = round(np.exp(result.conf_int())[0][1],2)
-            conf1 = np.exp(result.conf_int())[1][1]
-            p = round(result.pvalues[1], 3)
-        logregr = logregr.append({'Names': v, 'OR': params, 'lower': conf0, 'upper': conf1,'p_val': p}, ignore_index=True)
-        logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])    
-
-    if signif_only == True:
-        logregr = logregr[logregr['p_val'] < pmin]
     else:
-        pass
+        for col in reg_data.columns:
+            J = len(reg_data.columns)
+            for j in range(J):
+                v = reg_data[col].name
+                logit_model=sma.GLM(y,sma.add_constant(reg_data[[col, age_col, sex_col]]), family = sma.families.Binomial())
+                result=logit_model.fit()
+                params = round(np.exp(result.params)[1], 2)
+                conf0 = round(np.exp(result.conf_int())[0][1],2)
+                conf1 = round(np.exp(result.conf_int())[1][1],2)
+                p = round(result.pvalues[1], 3)
+            logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': p}, ignore_index=True)
+            logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])[(logregr['Names'] != age_col) & (logregr['Names'] != sex_col)]
 
-    if save_tab == True:
-        return pd.DataFrame.to_excel(logregr, 'Одномерный регрессионный анализ.xlsx')
-    else:
-        return logregr
-
-"""
-One-dimensional regression analysis with sex and age adjustment
-
-You shoild provide sex and age columns
-
-UNDER DEVELOPMENT!
-
-"""
-def regr_onedim_adj(df, group, age_col, sex_col, signif_only = False, pmin = 0.05, save_tab = False):
-
-    reg_data = df.drop(columns=group)
-    y = df[[group]]
-
-    logregr = pd.DataFrame()
-
-    g = reg_data.columns #[1:-1]
-
-    for col in g:
-        J = len(g)
-        for j in range(J):
-            v = reg_data[col].name
-            logit_model=sma.GLM(y,sma.add_constant(reg_data[[col, age_col, sex_col]]), family = sma.families.Binomial())
-            result=logit_model.fit()
-            params = round(np.exp(result.params)[1], 1)
-            conf0 = round(np.exp(result.conf_int())[0][1],2)
-            conf1 = np.exp(result.conf_int())[1][1]
-            p = round(result.pvalues[1], 3)
-        logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': p}, ignore_index=True)
-        logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])    
 
     if signif_only == True:
         logregr = logregr[logregr['p_val'] < pmin]
@@ -486,28 +473,48 @@ def roc_cut(df, vars, group, time = 0, family = 'logistic', save_tab = False):
 """
 One dimensional Cox regression analysis
 
+adjustment - you can provide Age and Gender adjustment, if needed
+
 EXAPLE:
 cox_onedim(df, 'DEATH', 'TIME')
 
 """
 
-def cox_onedim(df, group, time, save_tab = False):
+def cox_onedim(df, group, time, adjusted = False, signif_only = False, age_col = 1, sex_col = 1save_tab = False):
 
     reg_data = df.drop(columns=[group, time])
     cph = CoxPHFitter()
 
     coxregr = pd.DataFrame()
 
-    for col in reg_data:
-        v = reg_data[col].name
-        model = cph.fit(df[[col, group, time]], duration_col=time, event_col=group)
-        HR = round(model.hazard_ratios_[0], 2)
-        p = round(model.summary.iloc[:,8][0], 3)
-        conf0 = round(model.summary.iloc[:,5][0], 2)
-        conf1 = round(model.summary.iloc[:,6][0], 2)
-        coxregr = coxregr.append({'Фактор': v, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
+    if adjusted == False:
+        for col in reg_data:
+            v = reg_data[col].name
+            model = cph.fit(df[[col, group, time]], duration_col=time, event_col=group)
+            HR = round(model.hazard_ratios_[0], 2)
+            p = round(model.summary.iloc[:,8][0], 3)
+            conf0 = round(model.summary.iloc[:,5][0], 2)
+            conf1 = round(model.summary.iloc[:,6][0], 2)
+            coxregr = coxregr.append({'Фактор': v, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
     
-    coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+        coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+
+    else:
+        for col in reg_data:
+            v = reg_data[col].name
+            model = cph.fit(df[[col, age_col, sex_col, group, time]], duration_col=time, event_col=group)
+            HR = round(model.hazard_ratios_[0], 2)
+            p = round(model.summary.iloc[:,8][0], 3)
+            conf0 = round(model.summary.iloc[:,5][0], 2)
+            conf1 = round(model.summary.iloc[:,6][0], 2)
+            coxregr = coxregr.append({'Фактор': v, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
+    
+        coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])[(coxregr['Фактор'] != age_col) & (coxregr['Фактор'] != sex_col)]        
+
+    if signif_only == True:
+        coxregr = coxregr[coxregr['p_val'] < pmin]
+    else:
+        pass
 	
     if save_tab == True:
         return pd.DataFrame.to_excel(coxregr, 'Регрессия Кокса, одномерный анализ.xlsx')
