@@ -18,6 +18,7 @@ import gspread
 from sklearn.utils import resample
 from sklearn.metrics import roc_curve, auc
 from dask import delayed
+from numba import jit
 from scipy.stats import shapiro, ttest_ind, mannwhitneyu, fisher_exact, chi2_contingency, kruskal
 from oauth2client.client import GoogleCredentials
 from lifelines import CoxPHFitter
