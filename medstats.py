@@ -480,7 +480,7 @@ cox_onedim(df, 'DEATH', 'TIME')
 
 """
 
-def cox_onedim(df, group, time, adjusted = False, signif_only = False, age_col = 1, sex_col = 1save_tab = False):
+def cox_onedim(df, group, time, adjusted = False, signif_only = False, age_col = 1, sex_col = 1, save_tab = False):
 
     reg_data = df.drop(columns=[group, time])
     cph = CoxPHFitter()
