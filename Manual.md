@@ -2,7 +2,7 @@
 
 ## Import this repo from git
 
-You can use
+For direct import and installation of this repo into Jupyter Notebook or Google Colab you can use:
 ```
 !wget https://raw.githubusercontent.com/aysuvorov/medstats/Beta/medstats.py
 
