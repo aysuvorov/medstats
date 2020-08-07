@@ -105,7 +105,7 @@ Returns a list with 2.5, 50, 97.5 percentiles of p-value.
 ### `dummification(df, cat_vars)`
 
 - `df` - takes df
-- `cat_vars` - list of vars to be dummified. Delets original vars.
+- `cat_vars` - list of vars to be dummified. Deletes original vars.
 
 Returns data frame.
 
