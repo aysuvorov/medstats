@@ -177,7 +177,7 @@ Provides backwise selection of factors dropping largest p-values untill all the 
 
 - `family` - type of regression. Can be `'logistic'` or `'cox'`.
 - `df` - data frame
-- `group` - the var of endpoint. I.e. `group = 'GROUP'`
+- `group` - the var of endpoint. I.e. **`group = ['GROUP']`**
 - `lst` - list of significant factors or variables of interest
 - `time` - time variable, if we deal with `family = 'cox'`
 - `steps` - number of steps for model selection. For many factors consider greater steps.
