@@ -2,7 +2,24 @@
 
 Python module for medical statistics. This bunch of functions is dedicated to medical statistics I use in my work and for fun.
 
-## List of functions:
+Module uses
+```
+numpy
+pandas as pd
+scipy
+math
+statsmodels
+gspread
+sklearn
+sklearn
+dask
+numba
+oauth2client.client
+lifelines
+```
+You need to have all theese modules installed. 
+
+## List of functions: for details see [Manual](https://github.com/aysuvorov/medstats/blob/Beta/Manual.md)
 
 ### Import from google sheets:
 
@@ -18,7 +35,7 @@ https://docs.google.com/spreadsheets/d/`1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan
 
 ### Misc
 
-- `filler` - fills NaN with `mean` / `median` / `interpolate`. Translates columns to numerics.
+- `filler` - fills NaN with `df.mean` / `df.median` / `df.interpolate`. Translates columns to numerics.
 
 ### Sample size:
 
@@ -36,7 +53,7 @@ https://docs.google.com/spreadsheets/d/`1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan
 
 - `dummification` - creates dummies and deletes original vars 
 - `summary` - provides simple summary table with var types (numeric / category).
-- `compare` - statistical comparison between 2 groups. By default numerics compared using Mann-Whitney, shares - with Fisher exact test
+- `compare` - statistical comparison between 2 groups. By default numerics compared using Mann-Whitney (or you can use Welch t-test), shares - with Fisher exact test
 - `regr_onedim` - provides one-dimensional logistic regression analysis. Sex and Age adjustment is available.
 
 ### Survival
