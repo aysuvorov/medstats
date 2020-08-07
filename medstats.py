@@ -166,7 +166,7 @@ def bs_perc(a,b, perc, R = 100):
             B[i] = np.percentile(perm_sample_1, [perc]) - np.percentile(perm_sample_2, [perc])
         p[val] = (np.sum(abs(B) >= abs(t)) / (R+1))
 
-    return(np.percentile(p, [25, 50, 75]))
+    return(np.percentile(p, [2.5, 50, 97.5]))
     
 """
 Bootstrap comparison:
@@ -184,11 +184,11 @@ plac_n - number of patients in control group
 
 def bs_props(inv, inv_n, plac, plac_n, R=100):
     diff = inv - plac
-    ni = (np.array(inv*inv_n)).astype(int)
+    ni = (np.array(inv*inv_n/100)).astype(int)
     t0 = np.zeros(inv_n - ni)
     t1 = np.ones(ni)
 
-    npc = (np.array(plac*plac_n)).astype(int)
+    npc = (np.array(plac*plac_n/100)).astype(int)
     p0 = np.zeros(plac_n - npc)
     p1 = np.ones(npc)
 
@@ -288,52 +288,81 @@ def summary(df):
         summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'Количество': '% 6.0f' % n, 'Доля, %': percents,'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
                                       'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
         summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Мин','Медиана и 25/75 перцентили', 'Макс', 'Среднее и ст. отклонение', 'Критерий Шапиро-Уилка, р'])
-    return summarize
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(summarize, 'Описательные статистики.xlsx')
+    else:
+        return summarize
 
 """
 Compare variables by 2 groups
 
 Vars must be dummified!!!
 
-By default numerics compared using Mann-Whitney, shares - with Fisher exact test
-
 save_tab enables xlsx export
 
-@delayed requires .compute() method
 """
 
-def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', save_tab = False):
+@jit(nopython = True)
+def compare_cat(x_var, y_var):
+    gr1obs = np.sum(x_var)
+    gr2obs = np.sum(y_var)
+    gr1exp = len(x_var) - gr1obs
+    gr2exp = len(y_var) - gr2obs
+    return gr1obs, gr2obs, gr1exp, gr2exp
+
+@jit(nopython = True)
+def compare_numer_unnorm(x_var, y_var):
+    gr1obs = round(np.median(x_var),2)
+    gr2obs = round(np.median(y_var),2)
+    cent1 = np.percentile(x_var, [25,75])
+    cent2 = np.percentile(y_var, [25,75])
+    return gr1obs, gr2obs, cent1, cent2
+
+@jit(nopython = True)
+def compare_numer_norm(x_var, y_var):
+    gr1obs = round(np.median(x_var),2)
+    gr2obs = round(np.median(y_var),2)
+    sd1 = np.std(x_var)
+    sd2 = np.std(y_var)
+    return gr1obs, gr2obs, sd1, sd2
+
+
+def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', test = 'mw', save_tab = False):
 
     x = df.loc[df[group] == gr_id_1].drop(columns = group)
     y = df.loc[df[group] == gr_id_2].drop(columns = group)
 
     comparison = pd.DataFrame()
-    sep = ''
 
     for col in x:
         J = len(list(x.columns))
+        x_var = to_array(x, col)
+        y_var = to_array(y, col)
         for j in range(J):
             if len(np.unique(df[col])) < 3:
                 v = df[col].name 
-                gr1obs = np.sum(x[col])
-                gr2obs = np.sum(y[col])
-                gr1exp = len(x[col]) - gr1obs
-                gr2exp = len(y[col]) - gr2obs
-                obs = np.array([[gr1obs, gr2obs], [gr1exp, gr2exp]])
+                gr1obs, gr2obs, gr1exp, gr2exp = compare_cat(x_var, y_var)
                 # в таблицу идут:
-                p_val = round(fisher_exact(obs)[1], 3)
-                p1 = sep.join([str(round(gr1obs/len(x[col])*100,1)), " %", " (", str(gr1obs),")"])
-                p2 = sep.join([str(round(gr2obs/len(y[col])*100,1)), " %", " (", str(gr2obs), ")"])
+                p_val = round(fisher_exact(np.array([[gr1obs, gr2obs], [gr1exp, gr2exp]]))[1], 3)
+                p1 = ''.join([str(round(gr1obs/len(x_var)*100,1)), " %", " (", str(gr1obs),")"])
+                p2 = ''.join([str(round(gr2obs/len(y_var)*100,1)), " %", " (", str(gr2obs), ")"])
             else:
                 v = df[col].name
-                gr1obs = round(np.median(x[col]),2)
-                gr2obs = round(np.median(y[col]),2)
-                cent1 = np.percentile(x[col], [25,75])
-                cent2 = np.percentile(y[col], [25,75])
-                # в таблицу идут:
-                p_val = round(mannwhitneyu(x[col], y[col])[1], 3)
-                p1 = sep.join([str(gr1obs), " (", str(round(cent1[0],2)), "; ", str(round(cent1[1],2)), ")"])
-                p2 = sep.join([str(gr2obs), " (", str(round(cent2[0],2)), "; ", str(round(cent2[1],2)), ")"])
+                if test == 'mw':
+                    gr1obs, gr2obs, cent1, cent2 = compare_numer_unnorm(x_var, y_var)
+                    # в таблицу идут:
+                    p_val = round(mannwhitneyu(x[col], y[col])[1], 3)
+                    p1 = ''.join([str(gr1obs), " (", str(round(cent1[0],2)), "; ", str(round(cent1[1],2)), ")"])
+                    p2 = ''.join([str(gr2obs), " (", str(round(cent2[0],2)), "; ", str(round(cent2[1],2)), ")"])
+                elif test == 'tt':
+                    gr1obs, gr2obs, sd1, sd2 = compare_numer_norm(x_var, y_var)
+                    p_val = round(ttest_ind(x_var, y_var, equal_var = False)[1], 3)
+                    p1 = ''.join([str(gr1obs), " ± ", str(round(sd1, 1))])
+                    p2 = ''.join([str(gr2obs), " ± ", str(round(sd2, 1))])
+                else:
+                    print('ERROR: test is mw or tt (Welch)')
+
         comparison = comparison.append({'Фактор': v, name_1: p1, name_2: p2,'p_val': p_val}, ignore_index=True)
         comparison = comparison.reindex(columns=['Фактор', name_1, name_2, 'p_val'])
 
