@@ -27,12 +27,14 @@ from lifelines import CoxPHFitter
 Fills NaN using func - mean, median, interpolate
 
 (Simple imputer)
+
+func = df.mean, df.median, df.interpolate
 """
 def filler(df, func):
 	for col in df:
 		df[col].apply(pd.to_numeric, errors='coerce')
 
-	df = df.fillna(df.func())
+	df = df.fillna(func())
 	return df
 
 """
@@ -235,34 +237,52 @@ Categorial variables must be dummified!!!
 
 Returns variable type, N of patients, median, centiles or share%
 
-@delayed requires .compute() method
-
 """
+
+def to_array(df, col):
+    return df[[col]].to_numpy()[:,0]
+
+@jit(nopython = True)
+def cat_perc(var):
+    n = np.sum(var)
+    percents = round(n / len(var)*100, 1)
+    return n, percents
+
+@jit(nopython = True)
+def summ_numer(var):
+    avg = np.mean(var) 
+    sd = np.std(var) 
+    mn = np.min(var) 
+    mx = round(np.max(var),1)
+    md = round(np.median(var),1)
+    c25 = np.percentile(var, 25)
+    c75 = np.percentile(var, 75)
+    return avg, sd, mn, mx, md, c25, c75    
 
 def summary(df):
     summarize = pd.DataFrame()
     for col in df:
         J = len(list(df.columns))
+        var = to_array(df, col)
         for j in range(J):
-            if len(np.unique(df[col])) < 3:
+            if len(np.unique(var)) < 3:
                 v = df[col].name
-                var = 'Категориальная'
-                n = np.sum(df[col])
-                percents = round(n / len(df[col])*100, 1)
-                med = centiles0 = centiles1 = avg = sd = minn = maxx = sh = '-'
+                vartype = 'Категориальная'
+                n, percents = cat_perc(var)
+                percents = str(percents).join(' %')
+                med = avg = minn = maxx = sh = '-'
             else:
                 v = df[col].name
-                var = 'Числовая'
-                n = len(df[col])
+                vartype = 'Числовая'
+                n = len(var)
                 percents = '-'
-                flist = (np.mean, np.std, np.min, np.max, np.median)
-                avg, sd, minn, maxx, med = [f(df[col]) for f in flist]
-                centiles0 = round(np.percentile(df[col], 25), 2)
-                centiles1 = round(np.percentile(df[col], 75), 2)
-                sh = round(shapiro(df[col])[1], 3)
-        summarize = summarize.append({'Фактор': v, 'Тип': var, 'Количество': n, 'Доля, %': percents,'Медиана': med, '25%': centiles0, '75%': centiles1, 'Среднее': avg , 'Ст.отклон':  sd, \
+                avg, sd, minn, maxx, med, c25, c75 = summ_numer(var)
+                avg = ''.join([str(round(avg, 1)), ' ± ', str(round(sd, 1))])
+                med = ''.join([str(round(med,1)), ' (',str(round(c25,1)),'; ',str(round(c75, 1)),')'])
+                sh = round(shapiro(var)[1], 3)
+        summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'Количество': n, 'Доля, %': percents,'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
                                       'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
-        summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Мин','25%', 'Медиана', '75%', 'Макс', 'Среднее','Ст.отклон', 'Критерий Шапиро-Уилка, р'])
+        summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Мин','Медиана и 25/75 перцентили', 'Макс', 'Среднее и ст. отклонение', 'Критерий Шапиро-Уилка, р'])
     return summarize
 
 """
