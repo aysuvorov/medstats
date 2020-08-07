@@ -1,6 +1,11 @@
 # M a n u a l
 
-## Import this repo from git
+## Intro
+
+This module was created for young researches in medicine and other human sciences to collect typical functions we use in clinical research. This project is like an analog of`coppareGroups` or `finalfit` libraries in R. 
+
+
+## Import this repo from git 
 
 For direct import and installation of this repo into Jupyter Notebook or Google Colab you can use:
 ```
