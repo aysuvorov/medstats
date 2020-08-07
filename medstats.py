@@ -244,7 +244,7 @@ def to_array(df, col):
 
 @jit(nopython = True)
 def cat_perc(var):
-    n = np.sum(var)
+    n = round(np.sum(var),0)
     percents = round(n / len(var)*100, 1)
     return n, percents
 
@@ -265,7 +265,12 @@ def summary(df):
         J = len(list(df.columns))
         var = to_array(df, col)
         for j in range(J):
-            if len(np.unique(var)) < 3:
+            if len(np.unique(var)) == 1:
+                v = df[col].name
+                vartype = 'Уникальная'
+                n = round(len(var),0)
+                med = avg = minn = maxx = sh = np.unique(var)
+            elif len(np.unique(var)) < 3:
                 v = df[col].name
                 vartype = 'Категориальная'
                 n, percents = cat_perc(var)
@@ -274,13 +279,13 @@ def summary(df):
             else:
                 v = df[col].name
                 vartype = 'Числовая'
-                n = len(var)
+                n = round(len(var),0)
                 percents = '-'
                 avg, sd, minn, maxx, med, c25, c75 = summ_numer(var)
                 avg = ''.join([str(round(avg, 1)), ' ± ', str(round(sd, 1))])
                 med = ''.join([str(round(med,1)), ' (',str(round(c25,1)),'; ',str(round(c75, 1)),')'])
                 sh = round(shapiro(var)[1], 3)
-        summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'Количество': n, 'Доля, %': percents,'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
+        summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'Количество': '% 6.0f' % n, 'Доля, %': percents,'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
                                       'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
         summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Мин','Медиана и 25/75 перцентили', 'Макс', 'Среднее и ст. отклонение', 'Критерий Шапиро-Уилка, р'])
     return summarize
