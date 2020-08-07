@@ -24,11 +24,8 @@ from oauth2client.client import GoogleCredentials
 from lifelines import CoxPHFitter
 
 """
-Fills NaN using func - mean, median, interpolate
+filler
 
-(Simple imputer)
-
-func = df.mean, df.median, df.interpolate
 """
 def filler(df, func):
 	for col in df:
@@ -38,7 +35,7 @@ def filler(df, func):
 	return df
 
 """
-Importer from google docs using table key and sheet number (0,1,2...)
+import_gsheet
 
 """
 def import_gsheet(key, sheet = 0):
@@ -51,9 +48,8 @@ def import_gsheet(key, sheet = 0):
 
 
 """
-Sample size for proportions
+prop_size
 
-k = test / placebo
 """
 
 def prop_size(p1, p2, alpha = 0.05, beta = 0.8, k = 1):
@@ -66,7 +62,8 @@ def prop_size(p1, p2, alpha = 0.05, beta = 0.8, k = 1):
     return print("В настоящем исследовании в группе `Препарат` требуется "  + str(n1) + " пациентов, группе `Плацебо` - "  + str(n2) + ", во всей группе - " + str(group))
 
 """
-Sample size for means
+mean_size
+
 """
 
 def mean_size(m1, m2, sd1, sd2, alpha = 0.05, beta = 0.8, k = 1):
@@ -90,11 +87,8 @@ def cdf(array):
     return x, y
 
 """
-Bootstrap comparison
+bs_multi
 
-Compare arrays processed by some stats functions (means, medians, centiles, R2, rho, slopes?)
-
-Returns median of p-value with 2.5, 97.5% centiles
 """
 
 @jit
@@ -139,11 +133,8 @@ def bs_multi(a,b, func, R = 100):
 #    print(bs_multi(a=a, b=b, func = f))
     
 """
-Bootstrap comparison
+bs_perc
 
-Percentile comparison. I.e. compare arrays a,b by 25%. 
-
-Returns median of p-value with 2.5, 97.5% centiles
 """
 
 def bs_perc(a,b, perc, R = 100):
@@ -169,17 +160,8 @@ def bs_perc(a,b, perc, R = 100):
     return(np.percentile(p, [2.5, 50, 97.5]))
     
 """
-Bootstrap comparison:
+bs_props
 
-Proportions comparison. 
-
-Returns median of p-value with 2.5, 97.5% centiles
-
-inv - share in treatment group, aka 0.76
-inv_n - number of patients in treatment group
-
-plac - share in control group, aka 0.55
-plac_n - number of patients in control group
 """    
 
 def bs_props(inv, inv_n, plac, plac_n, R=100):
@@ -212,9 +194,8 @@ def bs_props(inv, inv_n, plac, plac_n, R=100):
 
     
 """
-Creating dummy variables
+dummification
 
-cat_vars - list of variables in original df to proceed
 """
 
 def dummification(df, cat_vars):
@@ -231,11 +212,7 @@ def dummification(df, cat_vars):
     return df
 
 """
-Describe variables function - in russian
-
-Categorial variables must be dummified!!!
-
-Returns variable type, N of patients, median, centiles or share%
+summary
 
 """
 
@@ -295,11 +272,7 @@ def summary(df):
         return summarize
 
 """
-Compare variables by 2 groups
-
-Vars must be dummified!!!
-
-save_tab enables xlsx export
+compare
 
 """
 
@@ -372,11 +345,7 @@ def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name
         return comparison
         
 """
-One-dimensional regression analysis
-
-Vars must be dummified!!!
-
-adjustment - you can provide Age and Gender adjustment, if needed
+regr_onedim
 
 """
 
@@ -426,7 +395,7 @@ def regr_onedim(df, group, adjusted = False, signif_only = False, age_col = 1, s
         return logregr
 
 """
-Multivariate regression for logistic regression
+regr_multi
 
 """
 def regr_multi(df, group, lst, save_tab = False):
@@ -446,14 +415,7 @@ def regr_multi(df, group, lst, save_tab = False):
         return multivar
 
 """
-ROC threshold cut offs calculations
-
-df - core data frame
-vars - list of vars of interest 
-group - target var, as 'GROUP'
-time - time var as 'TIME'
-group - in format 'GROUP', must be dummified
-family - 'logistic' or 'cox'
+roc_cut
 
 
 EXAMPLE:
@@ -525,9 +487,7 @@ def roc_cut(df, vars, group, time = 0, family = 'logistic', save_tab = False):
     return roc_cut
 
 """
-One dimensional Cox regression analysis
-
-adjustment - you can provide Age and Gender adjustment, if needed
+cox_onedim
 
 EXAPLE:
 cox_onedim(df, 'DEATH', 'TIME')
@@ -578,13 +538,7 @@ def cox_onedim(df, group, time, adjusted = False, signif_only = False, age_col =
     return coxregr
 
 """
-Backwise selection model
-
-lst - list of significant vars. 
-pmin - significance level
-steps - minimal steps for selection
-group - in format 'GROUP', must be dummified
-family - 'logistic' or 'cox'
+backwise
 
 """
 
