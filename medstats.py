@@ -13,14 +13,13 @@ import scipy.stats as st
 import math as m
 import statsmodels as sm
 import statsmodels.api as sma
-import gspread
+
 
 from sklearn.utils import resample
 from sklearn.metrics import roc_curve, auc
 from dask import delayed
 from numba import jit
 from scipy.stats import shapiro, ttest_ind, mannwhitneyu, fisher_exact, chi2_contingency, kruskal
-from oauth2client.client import GoogleCredentials
 from lifelines import CoxPHFitter
 
 """
@@ -33,19 +32,6 @@ def filler(df, func):
 
 	df = df.fillna(func())
 	return df
-
-"""
-import_gsheet
-
-"""
-def import_gsheet(key, sheet = 0):
-	gc = gspread.authorize(GoogleCredentials.get_application_default())
-
-	spreadsheet = gc.open_by_key(key) # (the string in the url following spreadsheet/d/)
-	sheet =  spreadsheet.get_worksheet(sheet)  # 0 - the first sheet in the file
-	df = pd.DataFrame(sheet.get_all_records())
-	return df
-
 
 """
 prop_size
