@@ -222,7 +222,7 @@ def summ_numer(var):
     c75 = np.percentile(var, 75)
     return avg, sd, mn, mx, md, c25, c75    
 
-def summary(df):
+def summary(df, save_tab = False):
     summarize = pd.DataFrame()
     for col in df:
         J = len(list(df.columns))
