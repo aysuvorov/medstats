@@ -9,29 +9,14 @@ pandas as pd
 scipy
 math
 statsmodels
-gspread
-sklearn
 sklearn
 dask
 numba
-oauth2client.client
 lifelines
 ```
 You need to have all theese modules installed. 
 
 ## List of functions: for details see [Manual](https://github.com/aysuvorov/medstats/blob/Beta/Manual.md)
-
-### Import from google sheets:
-
-- `import_gsheet` - imports gsheet table into workflow **when working in Colab**. To use the function you need to authenticate into your Google account with
-
-```
-from google.colab import auth
-auth.authenticate_user()
-```
-As arguments you should pass table key:
-
-https://docs.google.com/spreadsheets/d/`1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan3T1dkS0`/edit#gid=12556364 as '1CY3vBMfJNf55UkfrgdcefiUy6Jf2DZdOWDVtsan3T1dkS0' and sheet number.
 
 ### Misc
 
