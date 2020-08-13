@@ -592,3 +592,17 @@ def backwise(df, lst, group, time = 0, family = 'logistic', steps = 100, pmin = 
 
     else:
         print('ERROR: family must be logistic or cox')
+	
+"""
+forrest_plot
+"""
+
+def forrest_plot(names, risks, lower, upper, size_as_set = (8,5), color = 'blue'):
+    plt.figure(figsize=size_as_set)
+    sns.scatterplot(y=names, x=risks, color = color, s = 40, marker = 'D')
+    plt.axvline(1, c = 'black',linestyle = '--')
+
+    for r in range(len(names)):
+        plt.hlines(names[r], lower[r], upper[r], color = color)
+
+    plt.show()
