@@ -194,3 +194,16 @@ Returns table with name, AUC, optimal cut off, sensetivity, specificity.
 - `group` - the classifier. I.e. `group = 'GROUP'`
 - `time` - time variable, if we deal with `family = 'cox'`
 - `save_tab` - save to xlsx table
+
+## Graphics
+
+### `forrest_plot(names, risks, lower, upper, size_as_set = (8,5), color = 'blue')`
+
+Draws simple Forrestplot for logistic or Cox regressions
+
+- `names` - list of factor names
+- `risks` - list of OR or HR, etc.
+- `lower` - list of lower 95% CI
+- `upper` - list of upper 95% CI
+- `size_as_set` - figure size as `set()` for `plt.figure(figsize=size_as_set)`
+- `color` - color of risks and CI
