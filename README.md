@@ -49,3 +49,7 @@ You need to have all theese modules installed.
 
 - `backwise` - provides backwise selection model in logistic regressions
 - `roc_cut` - calculates cut-offs thresholds for significant numeric factors for logistic and Cox regression analysis
+
+### Graphics
+
+- `forrest_plot` - draws simple Forrest plot
