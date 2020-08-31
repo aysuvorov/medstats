@@ -606,3 +606,16 @@ def forrest_plot(names, risks, lower, upper, size_as_set = (8,5), color = 'blue'
         plt.hlines(names[r], lower[r], upper[r], color = color)
 
     plt.show()
+
+"""
+summary_graph
+"""
+
+def summary_graph(df):
+    for col in df:
+        if len(pd.unique(df[col])) < 3:
+            df[col].plot(kind = 'hist', title = col, xticks = [0,1], colormap = 'Dark2', xlim = [-0.5,1.5], grid = True)
+            plt.show()
+        else:
+            df[col].plot(kind = 'hist', title = col, colormap = 'tab20', grid = True)
+            plt.show()
