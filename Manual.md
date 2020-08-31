@@ -207,3 +207,7 @@ Draws simple Forrestplot for logistic or Cox regressions
 - `upper` - list of upper 95% CI
 - `size_as_set` - figure size as `set()` for `plt.figure(figsize=size_as_set)`
 - `color` - color of risks and CI
+
+### `summary_graph(df)`
+
+Plots every column of **dummified** dataframe as histogram via `pandas.plot`. Settings are default. For dummified variables color is green, for numerics - blue. Returns a bunch of graphics. 
