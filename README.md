@@ -16,7 +16,7 @@ lifelines
 ```
 You need to have all theese modules installed. 
 
-## List of functions: for details see [Manual](https://github.com/aysuvorov/medstats/blob/Beta/Manual.md)
+## List of functions: for details see [Manual](https://github.com/aysuvorov/medstats/blob/Beta_1/Manual.md)
 
 ### Misc
 
@@ -53,3 +53,4 @@ You need to have all theese modules installed.
 ### Graphics
 
 - `forrest_plot` - draws simple Forrest plot
+- `summary_graph` - Plots every column of dummified dataframe as histogram via pandas.plot. Settings are default. For dummified variables color is green, for numerics - blue
