@@ -53,4 +53,4 @@ You need to have all theese modules installed.
 ### Graphics
 
 - `forrest_plot` - draws simple Forrest plot
-- `summary_graph` - Plots every column of dummified dataframe as histogram via pandas.plot. Settings are default. For dummified variables color is green, for numerics - blue
+- `summary_graph` - plots every column of dummified dataframe as histogram via pandas.plot. Settings are default. For dummified variables color is green, for numerics - blue
