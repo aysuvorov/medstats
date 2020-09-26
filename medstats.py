@@ -30,7 +30,7 @@ def filler(df, func):
 	for col in df:
 		df[col].apply(pd.to_numeric, errors='coerce')
 
-	df = df.fillna(func())
+	df = df.fillna(func)
 	return df
 
 """
@@ -184,18 +184,22 @@ dummification
 
 """
 
+def dummy_serie(df, col):
+    tab = pd.get_dummies(df[col], prefix = col)
+    tab.loc[df[col].isnull(), tab.columns.str.startswith(str(col))] = np.nan
+    return(tab)
+
 def dummification(df, cat_vars):
-    for var in cat_vars:
-        cat_list='var'+'_'+var
-        cat_list = pd.get_dummies(df[var], prefix=var)
-        data1=df.join(cat_list)
-        df=data1
-
-    data_vars=df.columns.values.tolist()
-    to_keep=[i for i in data_vars if i not in cat_vars]
-
-    df=df[to_keep]
-    return df
+    data = df[cat_vars]
+    tab = pd.DataFrame()
+    for col in data:
+        tab = pd.concat([dummy_serie(df, col), tab], axis = 1)
+    
+    tab = tab[tab.columns[::-1]]
+    df =df.drop(columns = cat_vars)
+    df = pd.concat([df, tab], axis = 1)
+        
+    return(df)
 
 """
 summary
@@ -203,7 +207,7 @@ summary
 """
 
 def to_array(df, col):
-    return df[[col]].to_numpy()[:,0]
+    return df[[col]].dropna().to_numpy()[:,0]
 
 @jit(nopython = True)
 def cat_perc(var):
@@ -222,7 +226,112 @@ def summ_numer(var):
     c75 = np.percentile(var, 75)
     return avg, sd, mn, mx, md, c25, c75    
 
-def summary(df, save_tab = False):
+def summary_all(df, save_tab = False):
+    summarize = pd.DataFrame()
+    for col in df:
+        v = df[col].name
+        var = to_array(df, col)
+        if len(np.unique(var)) == 1:
+            vartype = 'Уникальная'
+            n = round(len(var),0)
+            med = avg = minn = maxx = sh = np.unique(var)
+            percents = '-'
+            N = len(var)
+        elif len(np.unique(var)) < 3:
+            v = df[col].name
+            vartype = 'Категориальная'
+            n, percents = cat_perc(var)
+            percents = str(percents).join(' %')
+            med = avg = minn = maxx = sh = '-'
+            N = len(var)
+        else:
+            v = df[col].name
+            vartype = 'Числовая'
+            n = round(len(var),0)
+            percents = '-'
+            avg, sd, minn, maxx, med, c25, c75 = summ_numer(var)
+            avg = ''.join([str(round(avg, 1)), ' ± ', str(round(sd, 1))])
+            med = ''.join([str(round(med,1)), ' [',str(round(c25,1)),'; ',str(round(c75, 1)),']'])
+            sh = shapiro(var)[1]
+            if sh >= 0.001:
+                sh = '{0:.3f}'.format(sh)
+            else:
+                sh = '< 0.001'                
+            N = len(var)
+            
+        summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'N':'% 6.0f' % N, 'Количество': '% 6.0f' % n, 'Доля, %': percents,'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
+                                      'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
+    summarize = summarize.reindex(columns=['Фактор', 'Тип', 'N','Количество', 'Доля, %', 'Мин','Медиана и 25/75 перцентили', 'Макс', 'Среднее и ст. отклонение', 'Критерий Шапиро-Уилка, р'])
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(summarize, 'Описательные статистики.xlsx')
+    else:
+        return summarize
+    
+def summary_num(df, save_tab = False):
+    summarize = pd.DataFrame()
+    for col in df:
+        v = df[col].name
+        var = to_array(df, col)
+        if len(np.unique(var)) == 1:
+            vartype = 'Уникальная'
+            n = round(len(var),0)
+            med = avg = minn = maxx = sh = np.unique(var)
+        else:
+            vartype = 'Числовая'
+            n = round(len(var),0)
+            avg, sd, minn, maxx, med, c25, c75 = summ_numer(var)
+            avg = ''.join([str(round(avg, 1)), ' ± ', str(round(sd, 1))])
+            med = ''.join([str(round(med,1)), ' [',str(round(c25,1)),'; ',str(round(c75, 1)),']'])
+            sh = shapiro(var)[1]
+            if sh >= 0.001:
+                sh = '{0:.3f}'.format(sh)
+            else:
+                sh = '< 0.001'
+                
+        summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'Количество': '% 6.0f' % n, 'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
+                                      'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
+    
+    summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Мин','Медиана и 25/75 перцентили', 'Макс', 'Среднее и ст. отклонение', 'Критерий Шапиро-Уилка, р'])
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(summarize, 'Описательные статистики.xlsx')
+    else:
+        return summarize    
+    
+def summary(df, save_tab = False, method = 'all'):
+    df = df
+    save_tab = save_tab
+    
+    if method == 'all':
+        return(summary_all(df, save_tab))
+    elif method == 'num':
+        return(summary_num(df, save_tab))
+    else:
+        return(print('ERROR: method is `all` or `num`'))
+
+"""
+summary for CRO tables
+
+Only for numeric vars
+
+"""
+
+@jit(nopython = True)
+def column_summary_CRO(var):
+    avg = np.mean(var) 
+    sd = np.std(var) 
+    mn = np.min(var) 
+    mx = round(np.max(var),1)
+    med = round(np.median(var),1)
+    c25 = np.percentile(var, 25)
+    c75 = np.percentile(var, 75)
+    c2_5 = np.percentile(var, 25)
+    c975 = np.percentile(var, 75)
+    cv = round(np.abs(sd/avg * 100),0) 
+    return avg, sd, mn, mx, med, c25, c75, c2_5, c975, cv
+
+def CRO_num_sum(df):
     summarize = pd.DataFrame()
     for col in df:
         J = len(list(df.columns))
@@ -230,32 +339,31 @@ def summary(df, save_tab = False):
         for j in range(J):
             if len(np.unique(var)) == 1:
                 v = df[col].name
-                vartype = 'Уникальная'
                 n = round(len(var),0)
-                med = avg = minn = maxx = sh = np.unique(var)
-            elif len(np.unique(var)) < 3:
-                v = df[col].name
-                vartype = 'Категориальная'
-                n, percents = cat_perc(var)
-                percents = str(percents).join(' %')
-                med = avg = minn = maxx = sh = '-'
+                avg = mn = mx = med = c25 = c75 = c2_5 = c975 = var[0]
+                sd = 0
+                sh = 'не \n применим'
+                cv = '-'
             else:
                 v = df[col].name
-                vartype = 'Числовая'
                 n = round(len(var),0)
-                percents = '-'
-                avg, sd, minn, maxx, med, c25, c75 = summ_numer(var)
-                avg = ''.join([str(round(avg, 1)), ' ± ', str(round(sd, 1))])
-                med = ''.join([str(round(med,1)), ' (',str(round(c25,1)),'; ',str(round(c75, 1)),')'])
-                sh = round(shapiro(var)[1], 3)
-        summarize = summarize.append({'Фактор': v, 'Тип': vartype, 'Количество': '% 6.0f' % n, 'Доля, %': percents,'Медиана и 25/75 перцентили': med, 'Среднее и ст. отклонение': avg , \
-                                      'Мин': minn, 'Макс': maxx, 'Критерий Шапиро-Уилка, р': sh}, ignore_index=True)
-        summarize = summarize.reindex(columns=['Фактор', 'Тип', 'Количество', 'Доля, %', 'Мин','Медиана и 25/75 перцентили', 'Макс', 'Среднее и ст. отклонение', 'Критерий Шапиро-Уилка, р'])
+                avg, sd, mn, mx, med, c25, c75, c2_5, c975, cv = column_summary_CRO(var)
+                sh = shapiro(var)[1]
+                if sh >= 0.001:
+                    sh = '{0:.3f}'.format(sh)
+                else:
+                    sh = '< 0.001'
+                
+        summarize = summarize.append({'Фактор': v, 'n': '% 6.0f' % n, 'Me': '{0:.1f}'.format(med), 'M': '{0:.1f}'.format(avg), \
+                                      'Min': '{0:.1f}'.format(mn), 'Max': '{0:.1f}'.format(mx), 'Sh-W test': sh, \
+                                      'SD':'{0:.1f}'.format(sd), 'CV%': '{0:.0f}'.format(cv), 'q25': '{0:.1f}'.format(c25), 'q75': '{0:.1f}'.format(c75), '95% CI l': '{0:.1f}'.format(c2_5), \
+                                      '95% CI u': '{0:.1f}'.format(c975)}, ignore_index=True)
+        summarize = summarize.reindex(columns=['Фактор', 'n', 'Sh-W test', 'M', 'SD', 'Me', 'Min', 'Max', 'q25', 'q75', \
+                                              '95% CI l', '95% CI u','CV%'])
 
-    if save_tab == True:
-        return pd.DataFrame.to_excel(summarize, 'Описательные статистики.xlsx')
-    else:
-        return summarize
+    return summarize.T
+
+
 
 """
 compare
@@ -287,7 +395,57 @@ def compare_numer_norm(x_var, y_var):
     return gr1obs, gr2obs, sd1, sd2
 
 
-def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', test = 'mw', save_tab = False):
+def compare_all(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', test = 'mw', save_tab = False):
+
+    x = df.loc[df[group] == gr_id_1].drop(columns = group)
+    y = df.loc[df[group] == gr_id_2].drop(columns = group)
+
+    comparison = pd.DataFrame()
+
+    for col in x:
+        x_var = to_array(x, col)
+        y_var = to_array(y, col)
+        v = df[col].name
+        if len(np.unique(df[col])) < 3:
+                 
+            gr1obs, gr2obs, gr1exp, gr2exp = compare_cat(x_var, y_var)
+                # в таблицу идут:
+            p_val = round(fisher_exact(np.array([[gr1obs, gr2obs], [gr1exp, gr2exp]]))[1], 3)
+            p1 = ''.join([str('{0:.0f}'.format(gr1obs)), " ", " (", str(round(gr1obs/len(x_var)*100,1))," %)"])
+            p2 = ''.join([str('{0:.0f}'.format(gr2obs)), " ", " (", str(round(gr2obs/len(y_var)*100,1))," %)"])
+            Nx = len(x_var)
+            Ny = len(y_var)
+        else:
+            v = df[col].name
+            if test == 'mw':
+                gr1obs, gr2obs, cent1, cent2 = compare_numer_unnorm(x_var, y_var)
+                    # в таблицу идут:
+                p_val = round(mannwhitneyu(x[col], y[col])[1], 3)
+                p1 = ''.join([str(gr1obs), " [", str(round(cent1[0],2)), "; ", str(round(cent1[1],2)), "]"])
+                p2 = ''.join([str(gr2obs), " [", str(round(cent2[0],2)), "; ", str(round(cent2[1],2)), "]"])
+                Nx = len(x_var)
+                Ny = len(y_var)
+            elif test == 'tt':
+                gr1obs, gr2obs, sd1, sd2 = compare_numer_norm(x_var, y_var)
+                p_val = round(ttest_ind(x_var, y_var, equal_var = False)[1], 3)
+                p1 = ''.join([str(gr1obs), " ± ", str(round(sd1, 1))])
+                p2 = ''.join([str(gr2obs), " ± ", str(round(sd2, 1))])
+                Nx = len(x_var)
+                Ny = len(y_var)
+            else:
+                print('ERROR: test is mw or tt (Welch)')
+
+        comparison = comparison.append({'Фактор': v, name_1: p1, name_2: p2,'p_val': p_val, 'N 0': '{0:.0f}'.format(Nx), 'N 1' : '{0:.0f}'.format(Ny)}, ignore_index=True) #
+        
+    comparison = comparison.reindex(columns=['Фактор', 'N 0','N 1',name_1, name_2, 'p_val'])# 
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(comparison, 'Сравнение по группам.xlsx')
+    else:
+        return comparison
+    
+
+def compare_num(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', test = 'mw', save_tab = False):
 
     x = df.loc[df[group] == gr_id_1].drop(columns = group)
     y = df.loc[df[group] == gr_id_2].drop(columns = group)
@@ -298,37 +456,85 @@ def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name
         J = len(list(x.columns))
         x_var = to_array(x, col)
         y_var = to_array(y, col)
-        for j in range(J):
-            if len(np.unique(df[col])) < 3:
-                v = df[col].name 
-                gr1obs, gr2obs, gr1exp, gr2exp = compare_cat(x_var, y_var)
+        v = df[col].name
+        if test == 'mw':
+                
+            gr1obs, gr2obs, cent1, cent2 = compare_numer_unnorm(x_var, y_var)
                 # в таблицу идут:
-                p_val = round(fisher_exact(np.array([[gr1obs, gr2obs], [gr1exp, gr2exp]]))[1], 3)
-                p1 = ''.join([str(round(gr1obs/len(x_var)*100,1)), " %", " (", str(gr1obs),")"])
-                p2 = ''.join([str(round(gr2obs/len(y_var)*100,1)), " %", " (", str(gr2obs), ")"])
-            else:
-                v = df[col].name
-                if test == 'mw':
-                    gr1obs, gr2obs, cent1, cent2 = compare_numer_unnorm(x_var, y_var)
-                    # в таблицу идут:
-                    p_val = round(mannwhitneyu(x[col], y[col])[1], 3)
-                    p1 = ''.join([str(gr1obs), " (", str(round(cent1[0],2)), "; ", str(round(cent1[1],2)), ")"])
-                    p2 = ''.join([str(gr2obs), " (", str(round(cent2[0],2)), "; ", str(round(cent2[1],2)), ")"])
-                elif test == 'tt':
-                    gr1obs, gr2obs, sd1, sd2 = compare_numer_norm(x_var, y_var)
-                    p_val = round(ttest_ind(x_var, y_var, equal_var = False)[1], 3)
-                    p1 = ''.join([str(gr1obs), " ± ", str(round(sd1, 1))])
-                    p2 = ''.join([str(gr2obs), " ± ", str(round(sd2, 1))])
-                else:
-                    print('ERROR: test is mw or tt (Welch)')
+            p_val = round(mannwhitneyu(x[col], y[col])[1], 3)
+            p1 = ''.join([str(gr1obs), " [", str(round(cent1[0],2)), "; ", str(round(cent1[1],2)), "]"])
+            p2 = ''.join([str(gr2obs), " [", str(round(cent2[0],2)), "; ", str(round(cent2[1],2)), "]"])
+            Nx = len(x_var)
+            Ny = len(y_var)
+        elif test == 'tt':
+            v = df[col].name
+            gr1obs, gr2obs, sd1, sd2 = compare_numer_norm(x_var, y_var)
+            p_val = round(ttest_ind(x_var, y_var, equal_var = False)[1], 3)
+            p1 = ''.join([str(gr1obs), " ± ", str(round(sd1, 1))])
+            p2 = ''.join([str(gr2obs), " ± ", str(round(sd2, 1))])
+            Nx = len(x_var)
+            Ny = len(y_var)
+        else:
+            print('ERROR: test is mw or tt (Welch)')
 
-        comparison = comparison.append({'Фактор': v, name_1: p1, name_2: p2,'p_val': p_val}, ignore_index=True)
-        comparison = comparison.reindex(columns=['Фактор', name_1, name_2, 'p_val'])
+        comparison = comparison.append({'Фактор': v, name_1: p1, name_2: p2,'p_val': p_val, 'N 0': Nx, 'N 1' : Ny}, ignore_index=True)
+        
+    comparison = comparison.reindex(columns=['Фактор', 'N 0','N 1', name_1, name_2, 'p_val'])
 
     if save_tab == True:
         return pd.DataFrame.to_excel(comparison, 'Сравнение по группам.xlsx')
     else:
         return comparison
+
+def compare_fac(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', save_tab = False):
+
+    x = df.loc[df[group] == gr_id_1].drop(columns = group)
+    y = df.loc[df[group] == gr_id_2].drop(columns = group)
+
+    comparison = pd.DataFrame()
+
+    for col in x:
+        v = df[col].name
+        x_var = to_array(x, col)
+        y_var = to_array(y, col)
+        gr1obs, gr2obs, gr1exp, gr2exp = compare_cat(x_var, y_var)
+                # в таблицу идут:
+        p_val = round(fisher_exact(np.array([[gr1obs, gr2obs], [gr1exp, gr2exp]]))[1], 3)
+        p1 = ''.join([str('{0:.0f}'.format(gr1obs)), " ", " (", str(round(gr1obs/len(x_var)*100,1))," %)"])
+        p2 = ''.join([str('{0:.0f}'.format(gr2obs)), " ", " (", str(round(gr2obs/len(y_var)*100,1))," %)"])
+        Nx = len(x_var)
+        Ny = len(y_var)
+
+        comparison = comparison.append({'Фактор': v, name_1: p1, name_2: p2,'p_val': p_val, 'N 0': '{0:.0f}'.format(Nx), 'N 1' : '{0:.0f}'.format(Ny)}, ignore_index=True) #
+        
+    comparison = comparison.reindex(columns=['Фактор', 'N 0','N 1',name_1, name_2, 'p_val'])# 
+
+    if save_tab == True:
+        return pd.DataFrame.to_excel(comparison, 'Сравнение по группам.xlsx')
+    else:
+        return comparison
+    
+    
+def compare(df, group, gr_id_1 = 0, gr_id_2 = 1, name_1 = 'Группа 0', name_2 = 'Группа 1', test = 'mw', save_tab = False, method = 'all'):
+    
+    df = df
+    group = group
+    gr_id_1 = gr_id_1
+    gr_id_2 = gr_id_2
+    name_1 = name_1
+    name_2 = name_2
+    test = test
+    save_tab = save_tab
+    method = method
+    
+    if method == 'all':
+        return(compare_all(df, group, gr_id_1, gr_id_2, name_1, name_2, test, save_tab))
+    elif method == 'num':
+        return(compare_num(df, group, gr_id_1, gr_id_2, name_1, name_2, test, save_tab))
+    elif method == 'fact':
+        return(compare_fac(df, group, gr_id_1, gr_id_2, name_1, name_2, save_tab))
+    else:
+        return(print('ERROR: method is `all` or `num` or `fact`'))
         
 """
 regr_onedim
@@ -343,35 +549,33 @@ def regr_onedim(df, group, adjusted = False, signif_only = False, age_col = 1, s
 
     if adjusted == False:
         for col in reg_data.columns:
-            J = len(reg_data.columns)
-            for j in range(J):
-                v = reg_data[col].name
-                logit_model=sma.GLM(y,sma.add_constant(reg_data[[col]]), family = sma.families.Binomial())
-                result=logit_model.fit()
-                params = round(np.exp(result.params)[1], 2)
-                conf0 = round(np.exp(result.conf_int())[0][1],2)
-                conf1 = round(np.exp(result.conf_int())[1][1],2)
-                p = round(result.pvalues[1], 3)
-            logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': p}, ignore_index=True)
-            logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val']) 
+            v = reg_data[col].name
+            logit_model=sma.GLM(y,sma.add_constant(reg_data[[col]]), family = sma.families.Binomial())
+            result=logit_model.fit()
+            params = np.exp(result.params)[1]
+            conf0 = np.exp(result.conf_int())[0][1]
+            conf1 = np.exp(result.conf_int())[1][1]
+            p = result.pvalues[1]
+            logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': '{0:.3f}'.format(p)}, ignore_index=True)
+            
+        logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val']) 
 
     else:
         for col in reg_data.columns:
-            J = len(reg_data.columns)
-            for j in range(J):
-                v = reg_data[col].name
-                logit_model=sma.GLM(y,sma.add_constant(reg_data[[col, age_col, sex_col]]), family = sma.families.Binomial())
-                result=logit_model.fit()
-                params = round(np.exp(result.params)[1], 2)
-                conf0 = round(np.exp(result.conf_int())[0][1],2)
-                conf1 = round(np.exp(result.conf_int())[1][1],2)
-                p = round(result.pvalues[1], 3)
-            logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': p}, ignore_index=True)
-            logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])[(logregr['Names'] != age_col) & (logregr['Names'] != sex_col)]
+            v = reg_data[col].name
+            logit_model=sma.GLM(y,sma.add_constant(reg_data[[col, age_col, sex_col]]), family = sma.families.Binomial())
+            result=logit_model.fit()
+            params = round(np.exp(result.params)[1], 2)
+            conf0 = round(np.exp(result.conf_int())[0][1],2)
+            conf1 = round(np.exp(result.conf_int())[1][1],2)
+            p = round(result.pvalues[1], 3)
+            logregr = logregr.append({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': '{0:.3f}'.format(p)}, ignore_index=True)
+        
+        logregr = logregr.reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])[(logregr['Names'] != age_col) & (logregr['Names'] != sex_col)]
 
 
     if signif_only == True:
-        logregr = logregr[logregr['p_val'] < pmin]
+        logregr = logregr[logregr['p_val'] < 0.05]
     else:
         pass
 
@@ -392,7 +596,7 @@ def regr_multi(df, group, lst, save_tab = False):
     conf0 = round(np.exp(result.conf_int())[1:][0],2)
     conf1 = round(np.exp(result.conf_int())[1:][1],2)
     p = round(result.pvalues[1:],3)
-    multivar = pd.DataFrame({'Names': names, 'OR': params, 'lower': conf0, 'upper': conf1,'p_val': p})
+    multivar = pd.DataFrame({'Names': v, 'OR': '{0:.2f}'.format(params), 'lower': '{0:.2f}'.format(conf0), 'upper': '{0:.2f}'.format(conf1),'p_val': '{0:.3f}'.format(p)})
     multivar.reset_index().iloc[:, 1:]
 
     if save_tab == True:
@@ -422,20 +626,18 @@ def roc_cut(df, vars, group, time = 0, family = 'logistic', save_tab = False):
         table = df[vars]
         y = df[group]
         for col in table:
-            J = len(list(table.columns))
-            for j in range(J):
-                v = table[col].name
-                pred = sma.GLM(y, sma.add_constant(table[col]), family = sma.families.Binomial()).fit().predict(sma.add_constant(table[col]))
-                fpr, tpr, thresholds =roc_curve(y, pred)
-                r = round(auc(fpr, tpr)*100, 1) #AUC
-                i = np.arange(len(tpr))
+            v = table[col].name
+            pred = sma.GLM(y, sma.add_constant(table[col]), family = sma.families.Binomial()).fit().predict(sma.add_constant(table[col]))
+            fpr, tpr, thresholds =roc_curve(y, pred)
+            r = round(auc(fpr, tpr)*100, 1) #AUC
+            i = np.arange(len(tpr))
 
-                roc = pd.DataFrame({'fpr' : pd.Series(fpr, index=i),'tpr' : pd.Series(tpr, index = i), '1-fpr' : pd.Series(1-fpr, index = i), 'tf' : pd.Series(tpr - (1-fpr), index = i), 'thresholds' : pd.Series(thresholds, index = i)})
-                roc = roc.iloc[(roc.tf-0).abs().argsort()[:1]]
-                thres = roc.iloc[0,4]
-                sens = round(roc.iloc[0,1]*100, 1) #sensetivity
-                spec = round(roc.iloc[0,2]*100, 1) #specifisity
-                cut = roc_job(pred, predictor = table[col], pos = thres).compute()
+            roc = pd.DataFrame({'fpr' : pd.Series(fpr, index=i),'tpr' : pd.Series(tpr, index = i), '1-fpr' : pd.Series(1-fpr, index = i), 'tf' : pd.Series(tpr - (1-fpr), index = i), 'thresholds' : pd.Series(thresholds, index = i)})
+            roc = roc.iloc[(roc.tf-0).abs().argsort()[:1]]
+            thres = roc.iloc[0,4]
+            sens = round(roc.iloc[0,1]*100, 1) #sensetivity
+            spec = round(roc.iloc[0,2]*100, 1) #specifisity
+            cut = roc_job(pred, predictor = table[col], pos = thres).compute()
             roc_cut = roc_cut.append({'Фактор': v, 'AUC, %': r, 'Порог': cut,'Чувствительность, %': sens, 'Специфичность, %':spec}, ignore_index=True)
 
     elif family == 'cox':
@@ -619,3 +821,28 @@ def summary_graph(df):
         else:
             df[col].plot(kind = 'hist', title = col, colormap = 'tab20', grid = True)
             plt.show()
+
+"""
+template part
+
+"""
+
+"""
+dist_box
+
+draws distplot with boxplot up for SINGLE NUMERIC VARIABLE
+
+"""
+
+def dist_box(df, var, label = None, label_X = None, label_Y = 'Плотность вероятности'):
+    sns.set(style = 'whitegrid')
+    labels = label
+    fig, (ax_box, ax_hist) = plt.subplots(2, sharex=True, \
+                                          gridspec_kw={"height_ratios": (.15, .85)}, figsize = (10, 8))
+    sns.distplot(df[[var]], ax = ax_hist, color = 'blue', bins = 7)
+    sns.boxplot(df[[var]], ax=ax_box, color = 'lightblue')
+    plt.legend(labels = labels)
+    plt.xlabel(label_X)
+    plt.ylabel(label_Y)
+    ax_box.set(xlabel='')
+    plt.show()
