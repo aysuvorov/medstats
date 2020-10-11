@@ -331,35 +331,34 @@ def column_summary_CRO(var):
     cv = round(np.abs(sd/avg * 100),0) 
     return avg, sd, mn, mx, med, c25, c75, c2_5, c975, cv
 
-def CRO_num_sum(df):
+def CRO_num_sum(df, digits = 1):
     summarize = pd.DataFrame()
     for col in df:
-        J = len(list(df.columns))
         var = to_array(df, col)
-        for j in range(J):
-            if len(np.unique(var)) == 1:
-                v = df[col].name
-                n = round(len(var),0)
-                avg = mn = mx = med = c25 = c75 = c2_5 = c975 = var[0]
-                sd = 0
-                sh = 'не \n применим'
-                cv = '-'
+        if len(np.unique(var)) == 1:
+            v = df[col].name
+            n = round(len(var),0)
+            avg = mn = mx = med = c25 = c75 = c2_5 = c975 = var[0]
+            sd = 0
+            sh = 'не \n применим'
+            cv = '-'
+        else:
+            v = df[col].name
+            n = round(len(var),0)
+            avg, sd, mn, mx, med, c25, c75, c2_5, c975, cv = column_summary_CRO(var)
+            sh = shapiro(var)[1]
+            if sh >= 0.001:
+                sh = '{0:.3f}'.format(sh)
             else:
-                v = df[col].name
-                n = round(len(var),0)
-                avg, sd, mn, mx, med, c25, c75, c2_5, c975, cv = column_summary_CRO(var)
-                sh = shapiro(var)[1]
-                if sh >= 0.001:
-                    sh = '{0:.3f}'.format(sh)
-                else:
-                    sh = '< 0.001'
-                
-        summarize = summarize.append({'Фактор': v, 'n': '% 6.0f' % n, 'Me': '{0:.1f}'.format(med), 'M': '{0:.1f}'.format(avg), \
-                                      'Min': '{0:.1f}'.format(mn), 'Max': '{0:.1f}'.format(mx), 'Sh-W test': sh, \
-                                      'SD':'{0:.1f}'.format(sd), 'CV%': '{0:.0f}'.format(cv), 'q25': '{0:.1f}'.format(c25), 'q75': '{0:.1f}'.format(c75), '95% CI l': '{0:.1f}'.format(c2_5), \
-                                      '95% CI u': '{0:.1f}'.format(c975)}, ignore_index=True)
-        summarize = summarize.reindex(columns=['Фактор', 'n', 'Sh-W test', 'M', 'SD', 'Me', 'Min', 'Max', 'q25', 'q75', \
-                                              '95% CI l', '95% CI u','CV%'])
+                sh = '< 0.001'
+                       
+        summarize = summarize.append({'Фактор': v, 'n': round(n,0), 'Me': round(med,digits), 'M': round(avg,digits), \
+                                      'Min': round(mn,digits), 'Max': round(mx,digits), 'Sh-W test': sh, \
+                                      'SD': round(sd,digits), 'CV%': cv, 'q25': round(c25,digits), 'q75': round(c75,digits), '95% CI l': round(c2_5,digits), \
+                                      '95% CI u': round(c975,digits)}, ignore_index=True)
+        
+    summarize = summarize.reindex(columns=['Фактор', 'n', 'Sh-W test', 'M', 'SD', 'Me', 'Min', 'Max', 'q25', 'q75', \
+                                              '95% CI l', '95% CI u','CV%']).set_index(summarize['Фактор']).iloc[:,1:]
 
     return summarize.T
 
