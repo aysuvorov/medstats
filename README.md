@@ -21,6 +21,7 @@ You need to have all theese modules installed.
 ### Misc
 
 - `filler` - fills NaN with `df.mean` / `df.median` / `df.interpolate`. Translates columns to numerics.
+- `Q_splitter` - splits columns into quartiles / quintiles, any tiles and drops original columns or preserve them
 
 ### Sample size:
 
