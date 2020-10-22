@@ -77,10 +77,10 @@ Returns `df` with no `NaN`
 
 - `df` - data frame with numeric columns you want to split into ntiles
 - `d` - number of ntiles you want to get from columns. For example `d = 4` means you get columns 
--- `var0` for 0-25% (`var0 = 1`) vs 25-100% (`var0 = 0`), 
--- `var1` 25-100% (`var1 = 1`) vs 0-25% (`var1 = 1`), 
--- `var2` 50-100% (`var2 = 1`) vs 0-50% (`var2 = 1`), 
--- `var3`  75-100% (`var3 = 1`) vs 0-75% (`var3 = 1`)
+  - `var0` for 0-25% (`var0 = 1`) vs 25-100% (`var0 = 0`), 
+  - `var1` 25-100% (`var1 = 1`) vs 0-25% (`var1 = 1`), 
+  - `var2` 50-100% (`var2 = 1`) vs 0-50% (`var2 = 1`), 
+  - `var3`  75-100% (`var3 = 1`) vs 0-75% (`var3 = 1`)
 - `drop` - drop original columns or preserve them. 
 
 ### `bs_multi(a,b, func, R = 100)`
