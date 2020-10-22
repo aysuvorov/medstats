@@ -202,6 +202,31 @@ def dummification(df, cat_vars):
     return(df)
 
 """
+Q_splitter
+
+"""
+
+def splitter_low(df, col, d):
+    df['Q'] = pd.qcut(df[col], d, labels=False)
+
+    for i in range(d):
+        if i == 0:
+            df[str(col + str(i))] = (df['Q'] == i).astype(int)
+        else:
+            df[str(col + str(i))] = (df['Q'] >= i).astype(int)
+    return(df)
+
+def Q_splitter(df, d, drop = True):
+    if drop == True:    
+        for w in df.columns:
+            splitter_low(df, w, d)
+            df = df.drop(columns = w)
+    else:
+        for w in df.columns:
+            splitter_low(df, w, d)        
+    return(df.drop(columns = 'Q'))
+
+"""
 summary
 
 """
