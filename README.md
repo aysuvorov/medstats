@@ -4,7 +4,7 @@ Python module for medical statistics. This bunch of functions is dedicated to me
 
 Module uses
 ```
-numpy
+numpy # blah - blah - blah
 pandas as pd
 scipy
 math
