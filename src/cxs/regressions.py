@@ -121,7 +121,8 @@ def auc_plotter(real, pred, save, title='', filename=""):
 
     sns.set(style='white')
     fig, ax = plt.subplots(figsize=(6,6))
-    plt.plot(lr_fpr, lr_tpr, marker='.', label = 'AUC ' + str(round(auc_r, 3)))
+    #plt.plot(lr_fpr, lr_tpr, marker='.', label = 'AUC ' + str(round(auc_r, 3)))
+    plt.plot(lr_fpr, lr_tpr, marker='.')
     plt.plot(lr_fpr, lr_fpr, linestyle='--')
     plt.title(title)
     plt.legend(loc = 4)
