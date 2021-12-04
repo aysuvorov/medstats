@@ -98,6 +98,28 @@ def p_adjust(vector, n, method = 'BH'):
 
     return new_vec
 
+
+def dplyr_filter(df, filter_var, value_lst):
+    """
+    Filters `filter_var` variable of df data frame and returns data frame
+    with only `value_lst` values in `filter_var`.
+    Works just as `dplyr filter()` function
+
+    Parameters
+    ----------
+    df: data frame
+    filter_var: variable to filter
+    value_lst: values to dtore in filter_var variable
+
+    Returns
+    -------
+    filtered pandas.DataFrame
+
+    """
+
+    index_lst = [i for part in value_lst for i in df[df[filter_var] == part].index ]
+    return df.loc[index_lst, :]
+
 """
 Descriptive statistics
 """
