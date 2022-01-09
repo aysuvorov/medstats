@@ -37,7 +37,7 @@ emmeans = importr('emmeans')
 afex = importr('afex')
 
 # import sys
-# sys.path.append('/home/guest/Документы/src/cxs')
+# sys.path.append('/home/guest/Документы/medstats/src/cxs')
 
 
 # Functions

@@ -33,80 +33,87 @@ proc = importr('pROC')
 AUC, sensetivity, specificity
 """
 
-def sens_spec_auc(real, pred):
-    """
-    Определение AUC и 95% CI по DeLong, Sensetivity,
-    Specificity на основании предсказанных КЛАССОВ
+def model_quality(real, pred):
 
-    Используется R-package pROC
+    real = real.to_numpy()
+    pred = pred.to_numpy()
 
-    """
-    cm = pd.DataFrame()
+    # auc and CI
+    n_bootstraps = 1000
+    rng_seed = 42
+    bootstrapped_scores = []
+
+    rng = np.random.RandomState(rng_seed)
+    for i in range(n_bootstraps):
+        indices = rng.randint(0, len(pred), len(pred))
+        if len(np.unique(real[indices])) < 2:
+            continue
+
+        score = roc_auc_score(real[indices], pred[indices])
+        bootstrapped_scores = bootstrapped_scores + [score]
+
+    sorted_scores = np.array(bootstrapped_scores)
+    sorted_scores.sort()
+
+    auc_ci_l = sorted_scores[int(0.025 * len(sorted_scores))]
+    auc_ci_u = sorted_scores[int(0.975 * len(sorted_scores))]
+    auc = roc_auc_score(real, pred)
     
-    cm['real'] = real
-    cm['pred'] = pred
+    # brier_score
+    brier = brier_score_loss(real, pred)
+
+    # confusion matrix
+    tn, fp, fn, tp = confusion_matrix(real, pred).ravel()
+
+    se = tp/(tp + fn)
+    se_ci = binomtest(int(se*100), n=100).proportion_ci()
+    sp = tn / (fp + tn)
+    sp_ci = binomtest(int(sp*100), n=100).proportion_ci()
+    #try:
+    npv = tn / (fn + tn)
+    try:
+        npv_ci = binomtest(int(npv*100), n=100).proportion_ci()
+    except:
+    #    npv = 0.9999999
+        npv_ci = [np.nan,np.nan]
+    ppv = tp / (tp + fp)
+    ppv_ci = binomtest(int(ppv*100), n=100).proportion_ci()
+    lr_pos = se/(1-sp)
+    lr_neg = (1-se)/sp
     
-    cm = cm.dropna()
+    ind = ['AUC', 'AUC 95%CI', 'Se', 'Se 95% CI', 'Sp', 'Sp 95% CI',
+        'PPV', 'PPV 95% CI', 'NPV', 'NPV 95% CI', 'LR+', 'LR-',
+        'Brier']
 
-    roc_obj = proc.roc(IntVector(cm['real']), IntVector(cm['pred']))
+    return(pd.Series([auc.round(3), 
+        str(auc_ci_l.round(3)) + ' - ' + str(auc_ci_u.round(3)),
+        se.round(3),
+        str(round(se_ci[0], 3)) + ' - ' + str(round(se_ci[1], 3)),
+        sp.round(3),
+        str(round(sp_ci[0], 3)) + ' - ' + str(round(sp_ci[1], 3)),
+        ppv.round(3),
+        str(round(ppv_ci[0], 3)) + ' - ' + str(round(ppv_ci[1], 3)),
+        #npv.round(3),
+        round(npv,3),
+        str(round(npv_ci[0], 3)) + ' - ' + str(round(npv_ci[1], 3)),
+        lr_pos.round(3),
+        lr_neg.round(3),
+        brier.round(3)
+        ], index=ind))    
 
-    auc_l,auc,auc_h = proc.ci(roc_obj)
 
-    coordd = proc.ci_coords(roc_obj, x='best')
+def threshold_getter(real, pred):
 
-    return("%s: AUC: %.3f (%.3f - %.3f), Sensitivity: %.3f (%.3f - %.3f), Specificity: %.3f (%.3f - %.3f)" % (pred, auc,auc_l,auc_h, \
-            coordd[2][1], coordd[2][0], coordd[2][2], coordd[1][1], \
-                coordd[1][0], coordd[1][2]))
+    g = pd.DataFrame()
 
-
-def sens_spec_auc_proba(real, pred):
-    """
-    Определение AUC и 95% CI по DeLong, Sensetivity,
-    Specificity на основании предсказанных ВЕРОЯТНОСТЕЙ
-
-    Используется R-package pROC
-
-    """
-    cm = pd.DataFrame()
+    for score in sorted(list(set(pred))):#[1:]:
     
-    cm['real'] = real
-    cm['pred'] = pred
-    
-    cm = cm.dropna()
+        faf = model_quality(real, (pred >= score).astype(int))    
+        g = pd.concat([g, faf], axis=1)
 
-    roc_obj = proc.roc(IntVector(cm['real']), FloatVector(cm['pred']))
+    g.columns = sorted(list(set(pred)))#[1:]
 
-    auc_l,auc,auc_h = proc.ci(roc_obj)
-
-    coordd = proc.ci_coords(roc_obj, x='best')
-    
-    return("%s: AUC: %.3f (%.3f - %.3f), Sensitivity: %.3f (%.3f - %.3f ), Specificity: %.3f (%.3f - %.3f)" % (pred, auc,auc_l,auc_h, \
-            coordd[2][1], coordd[2][0], coordd[2][2], coordd[1][1], \
-                coordd[1][0], coordd[1][2]))
-
-def short_auc_proba(real, pred):
-    """
-    Определение AUC и 95% CI по DeLong, Sensetivity,
-    Specificity на основании предсказанных ВЕРОЯТНОСТЕЙ
-
-    Используется R-package pROC
-
-    """
-    cm = pd.DataFrame()
-    
-    cm['real'] = real
-    cm['pred'] = pred
-    
-    cm = cm.dropna()
-
-    roc_obj = proc.roc(IntVector(cm['real']), FloatVector(cm['pred']))
-
-    auc_l,auc,auc_h = proc.ci(roc_obj)
-
-    coordd = proc.ci_coords(roc_obj, x='best')
-    
-    return("AUC: %.3f (%.3f - %.3f)" % (auc,auc_l,auc_h)) 
-
+    return(g.T)
 
 def auc_plotter(real, pred, save, title='', filename=""):
     auc_r = roc_auc_score(real, pred)
