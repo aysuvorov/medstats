@@ -63,7 +63,7 @@ def columnn_normalizer(df, col_lst):
                 pass
         try:
             df[col] = df[col].astype(float)
-        except ValueError:
+        except:
             pass
     
     return(df)
