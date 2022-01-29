@@ -18,6 +18,7 @@ from pandas.api.types import CategoricalDtype
 from statsmodels.tools.sm_exceptions import PerfectSeparationError
 from statsmodels.formula.api import ols, logit, mixedlm, gee, poisson
 from numpy.linalg import LinAlgError
+from lifelines import KaplanMeierFitter
 
 ## Rpy2 env
 import rpy2.robjects as ro
@@ -830,7 +831,7 @@ Regression models
 
 ## Logit model with group:baseline and group^time interaction
 
-def logit_repeated_category(df, group, word, name, pict=True, pict_sav=False):
+def logit_repeated_category(df, group, word, name, pict=True, pict_sav=False, time=None, figsize=(8, 5)):
 
     col_lst = [group] + [x for x in df.columns if word in x]
 
@@ -839,7 +840,12 @@ def logit_repeated_category(df, group, word, name, pict=True, pict_sav=False):
 
     data = pd.melt(data, id_vars=group)
     data.columns = ['group','time', 'val']
-    data['time'] = data['time'].astype(int) 
+    data['time'] = data['time'].astype(int)
+    if time:
+        data['time'] = data['time'].replace(sorted(list(set(data['time'].dropna()))), time)
+
+    else:
+        pass
 
     B = data.copy()
     B['val'] = B['val'].astype(int)
@@ -848,6 +854,7 @@ def logit_repeated_category(df, group, word, name, pict=True, pict_sav=False):
 
     if pict:
         sns.set(style='whitegrid')
+        f, ax = plt.subplots(figsize = figsize)
         g = sns.barplot(x="time", 
             y="val", 
             hue = 'group', 
@@ -1048,7 +1055,9 @@ def mixed_repeated_numeric(df, uin, group, word, name, transform='log', pict=Tru
 
 
 
-def mixed_repeated_numeric_2(df, group, word, name, transform='log', model='mixed', pict=True, pict_sav=False):
+def mixed_repeated_numeric_2(df, group, word, name, 
+    transform='log', model='mixed', pict=True, pict_sav=False,
+    time=None, figsize=(8, 5)):
     """
     Создание смешанных линейных моделей для оценки взаимодействия времени и группы
     
@@ -1076,8 +1085,15 @@ def mixed_repeated_numeric_2(df, group, word, name, transform='log', model='mixe
 
     data.columns = ['group','time', 'val']
 
+    if time:
+        data['time'] = data['time'].replace(sorted(list(set(data['time'].dropna()))), time)
+
+    else:
+        pass
+
     if pict:
         sns.set(style='whitegrid')
+        f, ax = plt.subplots(figsize = figsize)
         g = sns.pointplot(x="time", 
             y="val", 
             hue = 'group', 
@@ -1088,6 +1104,7 @@ def mixed_repeated_numeric_2(df, group, word, name, transform='log', model='mixe
         plt.xlabel('Визит')
         g.legend().set_title(None)
         plt.tight_layout()
+
         plt.show()
 
         if pict_sav:
@@ -1344,6 +1361,8 @@ def k_m_feron_plotter(
     plt.title(T)
     plt.xlabel(xlabel)
     plt.ylabel('Кумулятивная доля имеющих симптом, %')
+    plt.xlim([0.5, None])
+    
     
     if save:
         plt.savefig(plot_name + ".png")   
