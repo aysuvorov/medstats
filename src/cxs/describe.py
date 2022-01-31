@@ -40,11 +40,14 @@ afex = importr('afex')
 # import sys
 # sys.path.append('/home/guest/Документы/medstats/src/cxs')
 
+###############################################
+############### """Common Part""" #############
+###############################################
 
 # Functions
 
 """
-Data cleaning
+Data cleaners and mess organizers
 """
 
 def columnn_normalizer(df, col_lst):
@@ -120,6 +123,91 @@ def dplyr_filter(df, filter_var, value_lst):
 
     index_lst = [i for part in value_lst for i in df[df[filter_var] == part].index ]
     return df.loc[index_lst, :]
+
+"""
+Simple filler for subgroups in data frame.
+
+Main function is `group_simple_imputer`
+
+group_simple_imputer()
+====================
+
+Arguments:
+---------
+df - dataframe
+columns_lst - list of columns to replace NaNs with group columns
+group - grouping column
+func - if None (default) fills with zero, else - fills with median
+
+missing_columns_names()
+=====================
+Get the list of names of all columns with missings
+
+Arguments:
+---------
+df- dataframe
+
+Example:
+=======
+
+df = group_simple_imputer(df, 
+    ['Группа терапии'] + missing_columns_names(df), 
+    'Группа терапии', 
+    func=9)    
+
+"""
+
+# subgroup_simple_filler
+def subgroup_simple_filler(df, group, category, func=None):
+
+    A = df[df[group] == category].isnull().sum()
+    impute_names = A[A>0].index
+    del A
+
+    if func:
+        for var in impute_names:
+            df.loc[df[df[group] == category].index, [var]] = df.loc[df[df[group] == category].index, [var]].fillna((df.loc[df[df[group] == category].index, [var]].astype(float).median()))
+            if df.loc[df[df[group] == category].index, [var]].isnull().sum()[0] > 0:
+                print('Error chars in: ' + str(var))
+
+    else:    
+        df.loc[df[df[group] == category].index, impute_names] = df.loc[df[df[group] == category].index, impute_names].fillna(0)
+    return(df)
+
+# missing_columns_names
+def missing_columns_names(df):
+    return(list(df.isnull().sum()[df.isnull().sum() > 0].index))
+
+# group_simple_imputer
+def group_simple_imputer(df, column_lst, group, func=None):
+
+    B = df[column_lst]
+
+    for i in list(set(B[group])):
+        subgroup_simple_filler(B, group, i, func=func)
+
+    for col in B.columns:
+        df[col] = B[col]
+
+    return(df)
+
+
+def locf_filler(df, group, word_pattern, func=None, inplace=False):
+
+    data = df[['Группа терапии'] + [x for x in df.columns if word_pattern in x]]
+
+    data = group_simple_imputer(data, data.columns[:2], 'Группа терапии', func=func)
+
+    data = data.T.fillna(method='ffill').T
+
+    if inplace:
+        for col in data.columns:
+            df[col] = data[col]
+        return(df)
+    else:
+        return(data)
+
+
 
 """
 Descriptive statistics
@@ -825,6 +913,270 @@ def draw_data_frame_group(df, col_lst, group, pict_sav=True):
                 g.figure.savefig(col  + '.png')
 
 
+## Polar Plot Daniel Munblit
+
+def polar_plot_munblit(
+    df,
+    cols,
+    id_var,
+    figsize=(8, 15),
+    save=False,
+    figname=None,
+    title=''
+    ):
+
+    #show if any NaNs...
+    df_na = df.copy()
+    df_na = df_na.replace(1,0)
+    df_na = df_na.fillna(1)
+
+    # create filler...
+    filler_df = df.copy()
+    filler_df = filler_df.replace(0,1).fillna(1)
+
+    df = df.fillna(0)
+    # set figure size
+    plt.figure(figsize=figsize)
+
+    # plot polar axis
+    ax = plt.subplot(111, polar=True)
+    plt.axis('off')
+
+    # Set the coordinates limits
+    #upperLimit = 4
+    lowerLimit = 2
+
+    max = 1
+    slope = (max - lowerLimit) / max
+    coeff = (slope * 1)/25
+    nstart = 0.2 
+    cols = cols
+    id = df[id_var]
+
+    a = nstart
+    n = []
+    for i in range(len(cols)):
+        a = a + abs(coeff)
+        n = n + [a]
+
+    ##########################################
+    ##### Filler
+
+    for col, bot, fill_color in zip(cols, n, ['No symptoms'] + [None]*(len(cols) - 1)):
+
+        heights = (slope * filler_df[col])/25
+
+        # Compute the width of each bar. In total we have 2*Pi = 360°
+        width = 2*np.pi / len(filler_df.index)
+
+        # Compute the angle each bar is centered on:
+        indexes = list(range(1, len(filler_df.index)+1))
+        angles = [element * width for element in indexes]
+
+        # Draw bars
+        bars = ax.bar(
+            x=angles, 
+            height=heights, 
+            width=width, 
+            bottom=bot,
+            linewidth=2, 
+            color = '#dedede',
+            edgecolor="white", 
+            alpha=0.5, label=fill_color)
+        
+
+    #### Plot ###############################
+
+    for col, bot, color in zip(cols, n, ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+              '#9467bd', '#8c564b', '#e377c2', 'lightgreen',
+              '#bcbd22', '#17becf']):
+
+        heights = (slope * df[col])/25
+
+        # Compute the width of each bar. In total we have 2*Pi = 360°
+        width = 2*np.pi / len(df.index)
+
+        # Compute the angle each bar is centered on:
+        indexes = list(range(1, len(df.index)+1))
+        angles = [element * width for element in indexes]
+
+        # Draw bars
+        bars = ax.bar(
+            x=angles, 
+            height=heights, 
+            width=width, 
+            bottom=bot,
+            linewidth=2, 
+            color = color,
+            edgecolor="white",
+            label=col)
+        #ax.legend()
+
+    ##### NANS #######################################
+
+    for col, bot, labelz in zip(cols, n, ['Missing data'] + [None]*(len(cols) - 1)):
+
+        heights = (slope * df_na[col])/25
+
+        # Compute the width of each bar. In total we have 2*Pi = 360°
+        width = 2*np.pi / len(df_na.index)
+
+        # Compute the angle each bar is centered on:
+        indexes = list(range(1, len(df.index)+1))
+        angles = [element * width for element in indexes]
+
+        # Draw bars
+        bars = ax.bar(
+            x=angles, 
+            height=heights, 
+            width=width, 
+            bottom=bot,
+            linewidth=2, 
+            color = 'darkgray',
+            edgecolor="white",
+            label=labelz
+            )
+        ax.legend(bbox_to_anchor=(1.7, .5), loc='center right')
+
+
+    ###
+        # Add labels
+    for bar, angle, height, label in zip(bars,angles, heights, id):
+
+        # Labels are rotated. Rotation must be specified in degrees :(
+        rotation = np.rad2deg(angle)
+
+        # Flip some labels upside down
+        alignment = ""
+        if angle >= np.pi/2 and angle < 3*np.pi/2:
+            alignment = "right"
+            rotation = rotation + 180
+        else: 
+            alignment = "left"
+
+        # Finally add the labels
+        ax.text(
+            x=angle, 
+            y=n[-1] + abs(coeff), 
+            s=label, 
+            ha=alignment, 
+            va='center', 
+            rotation=rotation, 
+            rotation_mode="anchor")
+    
+    ax = plt.gca()
+    ax.set_facecolor('xkcd:white')
+    plt.rcParams['figure.facecolor'] = 'white'
+    plt.title(title, y = 1.15, fontweight='bold')
+    plt.tight_layout()
+
+
+    if save:
+        plt.savefig(figname + ".png")
+
+
+###############################################
+############### """Noref Part""" #############
+###############################################
+
+
+"""
+Draw dynamics for longitudinal data
+"""
+
+## Binary
+
+def draw_cat_repeated(
+    df, 
+    group, 
+    word, 
+    ylabel, 
+    pict_sav=False, 
+    time_vals_lst=None, 
+    figsize=(8, 5),
+    xlabel='Визит'
+    ):
+
+    col_lst = [group] + [x for x in df.columns if word in x]
+    data = df[col_lst].copy()
+
+    if time_vals_lst:
+        data.columns = [group] + time_vals_lst
+    
+    else:
+        data.columns = [group] + list(range(0, len([x for x in df.columns if word in x])))
+
+    data = pd.melt(data, id_vars=group)
+    data.columns = ['group','time', 'val']
+    data['time'] = data['time'].astype(int)
+
+    B = data.copy()
+    B['val'] = B['val'].astype(int)
+    B = B.groupby(['group', 'time']).mean() *100 
+    B = B.reset_index()
+
+    sns.set(style='whitegrid')
+    f, ax = plt.subplots(figsize = figsize)
+    g = sns.barplot(x="time", 
+        y="val", 
+        hue = 'group', 
+        data=B,
+        ci=None)
+    plt.ylabel(ylabel + ', %')
+    plt.xlabel(xlabel)
+    g.legend().set_title(None)
+    plt.show()
+
+    if pict_sav:
+        g.figure.savefig(ylabel  + ' - percent plot.png')
+
+
+# Numeric
+
+def draw_num_repeated(
+    df, 
+    group, 
+    word, 
+    ylabel, 
+    pict_sav=False, 
+    time_vals_lst=None, 
+    figsize=(8, 5),
+    xlabel='Визит'
+    ):
+    
+
+    col_lst = [group] + [x for x in df.columns if word in x]
+
+    data = df[col_lst].copy()
+
+    if time_vals_lst:
+        data.columns = [group] + time_vals_lst
+    
+    else:
+        data.columns = [group] + list(range(0, len([x for x in df.columns if word in x])))
+
+    data = pd.melt(data, id_vars=group)
+    data.columns = ['group','time', 'val']
+
+    sns.set(style='whitegrid')
+    f, ax = plt.subplots(figsize = figsize)
+    g = sns.pointplot(x="time", 
+        y="val", 
+        hue = 'group', 
+        data=data,
+        #ci=0.025,
+        dodge=0.25)
+    plt.ylabel(ylabel)
+    plt.xlabel('Визит')
+    g.legend().set_title(None)
+    plt.show()
+
+    if pict_sav:
+        g.figure.savefig(ylabel  + ' - anova plot.png', bbox_inches='tight')
+
+
+
+
 """
 Regression models
 """
@@ -1312,10 +1664,10 @@ def shuvalov_plot(
     return(list(annot))
 
 
-    """
-    Функция отрисовки КМ для длительности категориальных симптомов для Мили
+"""
+Функция отрисовки КМ для длительности категориальных симптомов для Мили
 
-    """
+"""
 
 def k_m_feron_plotter(
     df, 
@@ -1369,166 +1721,7 @@ def k_m_feron_plotter(
 
 
 
-## Polar Plot Daniel Munblit
 
-def polar_plot_munblit(
-    df,
-    cols,
-    id_var,
-    figsize=(8, 15),
-    save=False,
-    figname=None,
-    title=''
-    ):
-
-    #show if any NaNs...
-    df_na = df.copy()
-    df_na = df_na.replace(1,0)
-    df_na = df_na.fillna(1)
-
-    # create filler...
-    filler_df = df.copy()
-    filler_df = filler_df.replace(0,1).fillna(1)
-
-    df = df.fillna(0)
-    # set figure size
-    plt.figure(figsize=figsize)
-
-    # plot polar axis
-    ax = plt.subplot(111, polar=True)
-    plt.axis('off')
-
-    # Set the coordinates limits
-    #upperLimit = 4
-    lowerLimit = 2
-
-    max = 1
-    slope = (max - lowerLimit) / max
-    coeff = (slope * 1)/25
-    nstart = 0.2 
-    cols = cols
-    id = df[id_var]
-
-    a = nstart
-    n = []
-    for i in range(len(cols)):
-        a = a + abs(coeff)
-        n = n + [a]
-
-    ##########################################
-    ##### Filler
-
-    for col, bot, fill_color in zip(cols, n, ['No symptoms'] + [None]*(len(cols) - 1)):
-
-        heights = (slope * filler_df[col])/25
-
-        # Compute the width of each bar. In total we have 2*Pi = 360°
-        width = 2*np.pi / len(filler_df.index)
-
-        # Compute the angle each bar is centered on:
-        indexes = list(range(1, len(filler_df.index)+1))
-        angles = [element * width for element in indexes]
-
-        # Draw bars
-        bars = ax.bar(
-            x=angles, 
-            height=heights, 
-            width=width, 
-            bottom=bot,
-            linewidth=2, 
-            color = '#dedede',
-            edgecolor="white", 
-            alpha=0.5, label=fill_color)
-        
-
-    #### Plot ###############################
-
-    for col, bot, color in zip(cols, n, ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
-              '#9467bd', '#8c564b', '#e377c2', 'lightgreen',
-              '#bcbd22', '#17becf']):
-
-        heights = (slope * df[col])/25
-
-        # Compute the width of each bar. In total we have 2*Pi = 360°
-        width = 2*np.pi / len(df.index)
-
-        # Compute the angle each bar is centered on:
-        indexes = list(range(1, len(df.index)+1))
-        angles = [element * width for element in indexes]
-
-        # Draw bars
-        bars = ax.bar(
-            x=angles, 
-            height=heights, 
-            width=width, 
-            bottom=bot,
-            linewidth=2, 
-            color = color,
-            edgecolor="white",
-            label=col)
-        #ax.legend()
-
-    ##### NANS #######################################
-
-    for col, bot, labelz in zip(cols, n, ['Missing data'] + [None]*(len(cols) - 1)):
-
-        heights = (slope * df_na[col])/25
-
-        # Compute the width of each bar. In total we have 2*Pi = 360°
-        width = 2*np.pi / len(df_na.index)
-
-        # Compute the angle each bar is centered on:
-        indexes = list(range(1, len(df.index)+1))
-        angles = [element * width for element in indexes]
-
-        # Draw bars
-        bars = ax.bar(
-            x=angles, 
-            height=heights, 
-            width=width, 
-            bottom=bot,
-            linewidth=2, 
-            color = 'darkgray',
-            edgecolor="white",
-            label=labelz
-            )
-        ax.legend(bbox_to_anchor=(1.7, .5), loc='center right')
-
-
-    ###
-        # Add labels
-    for bar, angle, height, label in zip(bars,angles, heights, id):
-
-        # Labels are rotated. Rotation must be specified in degrees :(
-        rotation = np.rad2deg(angle)
-
-        # Flip some labels upside down
-        alignment = ""
-        if angle >= np.pi/2 and angle < 3*np.pi/2:
-            alignment = "right"
-            rotation = rotation + 180
-        else: 
-            alignment = "left"
-
-        # Finally add the labels
-        ax.text(
-            x=angle, 
-            y=n[-1] + abs(coeff), 
-            s=label, 
-            ha=alignment, 
-            va='center', 
-            rotation=rotation, 
-            rotation_mode="anchor")
-    
-    ax = plt.gca()
-    ax.set_facecolor('xkcd:white')
-    plt.rcParams['figure.facecolor'] = 'white'
-    plt.title(title, y = 1.15, fontweight='bold')
-    plt.tight_layout()
-
-
-    if save:
-        plt.savefig(figname + ".png")
 
 
 
