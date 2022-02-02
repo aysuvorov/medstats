@@ -21,8 +21,8 @@ from lifelines import CoxPHFitter
 from rpy2.robjects.packages import importr
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects import pandas2ri, FloatVector, IntVector, FactorVector, Formula
-from sklearn.metrics import roc_auc_score, roc_curve
-
+from sklearn.metrics import roc_auc_score, roc_curve, brier_score_loss, confusion_matrix
+from scipy.stats import binomtest
 
 stats = importr('stats')
 base = importr('base')
