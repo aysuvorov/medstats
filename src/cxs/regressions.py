@@ -33,114 +33,153 @@ proc = importr('pROC')
 AUC, sensetivity, specificity
 """
 
-def model_quality(real, pred):
+def auc_plotter_numeric(real, pred, title=None):
 
-    real = real.to_numpy()
-    pred = pred.to_numpy()
+    thresholds = np.sort(pred, axis=None)
 
-    # auc and CI
-    n_bootstraps = 1000
-    rng_seed = 42
-    bootstrapped_scores = []
+    ROC = np.zeros((len(real) + 2, 2))
+    ROC = np.append(ROC, [[1,1]],axis = 0)[::-1]
 
-    rng = np.random.RandomState(rng_seed)
-    for i in range(n_bootstraps):
-        indices = rng.randint(0, len(pred), len(pred))
-        if len(np.unique(real[indices])) < 2:
-            continue
+    for i in range(len(real)):
+        t = thresholds[i]
 
-        score = roc_auc_score(real[indices], pred[indices])
-        bootstrapped_scores = bootstrapped_scores + [score]
+        # Classifier / label agree and disagreements for current threshold.
+        TP_t = np.logical_and( pred > t, real==1 ).sum()
+        TN_t = np.logical_and( pred <=t, real==0 ).sum()
+        FP_t = np.logical_and( pred > t, real==0 ).sum()
+        FN_t = np.logical_and( pred <=t, real==1 ).sum()
 
-    sorted_scores = np.array(bootstrapped_scores)
-    sorted_scores.sort()
+        # Compute false positive rate for current threshold.
+        FPR_t = FP_t / float(FP_t + TN_t)
+        ROC[i+1,0] = FPR_t
 
-    auc_ci_l = sorted_scores[int(0.025 * len(sorted_scores))]
-    auc_ci_u = sorted_scores[int(0.975 * len(sorted_scores))]
-    auc = roc_auc_score(real, pred)
-    
-    # brier_score
-    brier = brier_score_loss(real, pred)
+        # Compute true  positive rate for current threshold.
+        TPR_t = TP_t / float(TP_t + FN_t)
+        ROC[i+1,1] = TPR_t
 
-    # confusion matrix
-    tn, fp, fn, tp = confusion_matrix(real, pred).ravel()
+        # Plot the ROC curve.
+    fig = plt.figure(figsize=(6,6))
+    plt.plot(ROC[:,0], ROC[:,1], lw=2)
+    plt.plot([[0,0], [1,1]], linestyle='--', c = 'gray')
+    plt.xlim(-0.1,1.1)
+    plt.ylim(-0.1,1.1)
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.grid()
 
-    se = tp/(tp + fn)
-    se_ci = binomtest(int(se*100), n=100).proportion_ci()
-    sp = tn / (fp + tn)
-    sp_ci = binomtest(int(sp*100), n=100).proportion_ci()
-    #try:
-    npv = tn / (fn + tn)
-    try:
-        npv_ci = binomtest(int(npv*100), n=100).proportion_ci()
-    except:
-    #    npv = 0.9999999
-        npv_ci = [np.nan,np.nan]
-    ppv = tp / (tp + fp)
-    ppv_ci = binomtest(int(ppv*100), n=100).proportion_ci()
-    lr_pos = se/(1-sp)
-    lr_neg = (1-se)/sp
-    
-    ind = ['AUC', 'AUC 95%CI', 'Se', 'Se 95% CI', 'Sp', 'Sp 95% CI',
-        'PPV', 'PPV 95% CI', 'NPV', 'NPV 95% CI', 'LR+', 'LR-',
-        'Brier']
+    AUC = 0.
+    for i in range(len(real)):
 
-    return(pd.Series([auc.round(3), 
-        str(auc_ci_l.round(3)) + ' - ' + str(auc_ci_u.round(3)),
-        se.round(3),
-        str(round(se_ci[0], 3)) + ' - ' + str(round(se_ci[1], 3)),
-        sp.round(3),
-        str(round(sp_ci[0], 3)) + ' - ' + str(round(sp_ci[1], 3)),
-        ppv.round(3),
-        str(round(ppv_ci[0], 3)) + ' - ' + str(round(ppv_ci[1], 3)),
-        #npv.round(3),
-        round(npv,3),
-        str(round(npv_ci[0], 3)) + ' - ' + str(round(npv_ci[1], 3)),
-        lr_pos.round(3),
-        lr_neg.round(3),
-        brier.round(3)
-        ], index=ind))    
+        AUC += (ROC[i+1,0]-ROC[i,0]) * (ROC[i+1,1]+ROC[i,1]) * -1
+    AUC *= 0.5
 
-
-def threshold_getter(real, pred):
-
-    g = pd.DataFrame()
-
-    for score in sorted(list(set(pred))):#[1:]:
-    
-        faf = model_quality(real, (pred >= score).astype(int))    
-        g = pd.concat([g, faf], axis=1)
-
-    g.columns = sorted(list(set(pred)))#[1:]
-
-    return(g.T)
-
-def auc_plotter(real, pred, save, title='', filename=""):
-    auc_r = roc_auc_score(real, pred)
-
-    if auc_r > 0.5:
-    
-        lr_fpr, lr_tpr, _ = roc_curve(real, pred)
-
+    if title:
+        plt.title(title)
     else:
-        lr_fpr, lr_tpr, _ = roc_curve(real.replace([0,1],[1,0]), pred)
-        auc_r = roc_auc_score(real.replace([0,1],[1,0]), pred)
-
-    sns.set(style='white')
-    fig, ax = plt.subplots(figsize=(6,6))
-    #plt.plot(lr_fpr, lr_tpr, marker='.', label = 'AUC ' + str(round(auc_r, 3)))
-    plt.plot(lr_fpr, lr_tpr, marker='.')
-    plt.plot(lr_fpr, lr_fpr, linestyle='--')
-    plt.title(title)
-    plt.legend(loc = 4)
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    if save:
-        plt.savefig(filename + '.png')
-
+        plt.title('ROC curve, AUC = %.3f'%AUC)
     plt.show()
 
+#+-------------------------------------------------------------------
+class ModPerformance(object):
 
+    def __init__(
+        self, 
+        real, 
+        pred
+        )-> None:
+
+        self.real = np.asarray(real)
+        self.pred = np.asarray(pred)
+
+        thresholds = np.sort(self.pred, axis=None)
+
+        ROC = np.zeros((len(self.real) + 2, 2))
+        ROC = np.append(ROC, [[1,1]],axis = 0)[::-1]
+
+        for i in range(len(self.real)):
+            t = thresholds[i]
+
+            # Classifier / label agree and disagreements for current threshold.
+            TP_t = np.logical_and( self.pred > t, self.real==1 ).sum()
+            TN_t = np.logical_and( self.pred <=t, self.real==0 ).sum()
+            FP_t = np.logical_and( self.pred > t, self.real==0 ).sum()
+            FN_t = np.logical_and( self.pred <=t, self.real==1 ).sum()
+
+            # Compute false positive rate for current threshold.
+            FPR_t = FP_t / float(FP_t + TN_t)
+            ROC[i+1,0] = FPR_t
+
+            # Compute true  positive rate for current threshold.
+            TPR_t = TP_t / float(TP_t + FN_t)
+            ROC[i+1,1] = TPR_t
+
+        AUC = 0.
+        for i in range(len(self.real)):
+
+            AUC += (ROC[i+1,0]-ROC[i,0]) * (ROC[i+1,1]+ROC[i,1]) * -1
+        AUC *= 0.5
+
+        if AUC < 0.5:
+            self.real = (self.real - 1)*-1     
+
+    def auc(self):  
+        result = proc.ci(FloatVector(self.real), FloatVector(self.pred))
+        return(result[1], result[0], result[2])
+
+
+    def thresholds(real, pred):
+
+        brier = brier_score_loss(real, pred)
+
+        tn, fp, fn, tp = confusion_matrix(real, pred).ravel()
+
+        se = tp/(tp + fn)
+        se_ci = binomtest(int(se*100), n=100).proportion_ci()
+        sp = tn / (fp + tn)
+        sp_ci = binomtest(int(sp*100), n=100).proportion_ci()
+        npv = tn / (fn + tn)
+        try:
+            npv_ci = binomtest(int(npv*100), n=100).proportion_ci()
+        except:
+            npv_ci = [np.nan,np.nan]
+        ppv = tp / (tp + fp)
+        ppv_ci = binomtest(int(ppv*100), n=100).proportion_ci()
+        lr_pos = se/(1-sp)
+        lr_neg = (1-se)/sp
+        
+        ind = ['Se', 'Se 95% CI', 'Sp', 'Sp 95% CI',
+            'PPV', 'PPV 95% CI', 'NPV', 'NPV 95% CI', 'LR+', 'LR-',
+            'Brier']
+
+        return(pd.Series([se.round(3),
+            str(round(se_ci[0], 3)) + ' - ' + str(round(se_ci[1], 3)),
+            sp.round(3),
+            str(round(sp_ci[0], 3)) + ' - ' + str(round(sp_ci[1], 3)),
+            ppv.round(3),
+            str(round(ppv_ci[0], 3)) + ' - ' + str(round(ppv_ci[1], 3)),
+            round(npv,3),
+            str(round(npv_ci[0], 3)) + ' - ' + str(round(npv_ci[1], 3)),
+            lr_pos.round(3),
+            lr_neg.round(3),
+            brier.round(3)
+            ], index=ind)) 
+
+
+    def threshold_getter(self):
+
+        g = pd.DataFrame()
+        for score in sorted(list(set(self.pred))):
+            faf = thresholds(self.real, np.array(self.pred >= score))    
+            g = pd.concat([g, faf], axis=1)
+        g.columns = sorted(list(set(self.pred)))
+        g = g.T.reset_index()
+        g.rename(columns={'index':'Thres'}, inplace=True)
+        return(g)
+
+    def plot_roc(self, title=None):
+        auc_plotter_numeric(self.real, self.pred, title=title)
+
+#+-------------------------------------------------------------------
 """
 Regressions
 """
