@@ -769,32 +769,55 @@ def dummification(df, cat_vars):
 
 ## Numerics
 
-def numerics_95CI(df, num_vars):
+def numerics_95CI(df, num_vars, statistic = 'automatic'):
     data = pd.DataFrame()
     for col in df[num_vars].columns:
         name = df[col].name
-        A = to_array(df, col)
-        test = shapiro(A)[1]
-        if test < 0.05:
-            B = np.zeros(10000)
+        A = np.asarray(df[col].dropna())
         
-            for i in range(0,10000):
-                B[i] = np.median(np.random.choice(A, len(A)))
+        if statistic == 'automatic':
+            test = shapiro(A)[1]
+            if test < 0.05:
+                B = np.zeros(10000)
+            
+                for i in range(0,10000):
+                    B[i] = np.median(np.random.choice(A, len(A)))
+            
+                way = 'BS'
+                stat = 'Median'
+                point = np.median(A)
+                low = np.percentile(B, 2.5)
+                high = np.percentile(B, 97.5)
         
-            way = 'BS'
-            stat = 'Median'
-            low = np.percentile(B, 2.5)
-            high = np.percentile(B, 97.5)
-    
-        else:
+            else:
+                way = 'Conf.Int'
+                stat = 'Mean'
+                point = np.mean(A)
+                low = sms.DescrStatsW(A).tconfint_mean()[0]
+                high = sms.DescrStatsW(A).tconfint_mean()[1]
+        
+        elif statistic == 'mean':
             way = 'Conf.Int'
             stat = 'Mean'
+            point = np.mean(A)
             low = sms.DescrStatsW(A).tconfint_mean()[0]
             high = sms.DescrStatsW(A).tconfint_mean()[1]
 
-        data = data.append({'Фактор': name, 'Способ': way, 'Статистика': stat,'2.5% CI': round(low,2), '97.5% CI': round(high, 2)}, ignore_index=True) #
+        else:
+            print('Statistic is `automatic` or `mean`')
+
+
+        data = data.append(
+            {
+                'Фактор': name, 
+                'Способ': way, 
+                'Статистика': stat,
+                'Point est':point, 
+                '2.5% CI': round(low,2), 
+                '97.5% CI': round(high, 2)
+            }, ignore_index=True) 
         
-    return(data.reindex(columns=['Фактор', 'Способ','Статистика','2.5% CI', '97.5% CI']))
+    return(data.reindex(columns=['Фактор', 'Способ','Статистика','Point est', '2.5% CI', '97.5% CI']))
 
 ## Proportions
 
@@ -913,9 +936,31 @@ def draw_data_frame_group(df, col_lst, group, pict_sav=True):
                 g.figure.savefig(col  + '.png')
 
 
-## Polar Plot Daniel Munblit
+## Bland Altman Plot
 
-def polar_plot_munblit(
+def bland_altman_plot(data1, data2, x_label='', y_label='',save=False, name=None, *args, **kwargs):
+    data1     = np.asarray(data1)
+    data2     = np.asarray(data2)
+    mean      = np.mean([data1, data2], axis=0)
+    diff      = data1 - data2                   
+    md        = np.mean(diff)                   
+    sd        = np.std(diff, axis=0)            
+
+    fig, ax = plt.subplots(figsize=(10,6))
+    g=sns.scatterplot(mean, diff, *args, **kwargs, color='g')
+    plt.axhline(md,           color='red', linestyle='--')
+    plt.axhline(md + 1.96*sd, color='gray', linestyle='--')
+    plt.axhline(md - 1.96*sd, color='gray', linestyle='--')
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    if save:
+        g.figure.savefig(name  + '.png')
+
+
+
+## Polar Circular Plot 
+
+def polar_plot_circular(
     df,
     cols,
     id_var,
