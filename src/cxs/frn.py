@@ -219,8 +219,6 @@ def draw_num_repeated(
         g.figure.savefig(ylabel  + ' - anova plot.png', bbox_inches='tight')
 
 
-
-
 """
 Regression models
 """
@@ -391,103 +389,6 @@ def mixed_repeated_numeric(df, uin, group, word):
 
 
         ''')
-
-
-def mixed_repeated_numeric_2(df, group, word, name, 
-    transform='log', model='mixed', pict=True, pict_sav=False,
-    time=None, figsize=(8, 5)):
-    """
-    Создание смешанных линейных моделей для оценки взаимодействия времени и группы
-    
-    - Преобразование осуществляется через ранжирование значений в длинном формате
-    - В таблице не додлжно быть пропусков
-
-    df - таблица с данными
-    group - переменная группы
-    word - фрагмент переменной, определяющей визит и признак (например "кашель" для всех переменных с кашлем)
-    name - название переменной, как оно будет на графике
-    transform - преобразование данных. Ранжирование ('rank'), логарифмирование ('log'), box-cox ('bc'), 
-        'none' - без трансформирования
-    pict - показывать ли график
-    model - тип модели - 'mixed' или 'gee'
-    pict_sav - сохранять ли график
-    """
-
-    col_lst = [group] + [x for x in df.columns if word in x]
-
-    data = df[col_lst].copy()
-    
-    data.columns = [group] + list(range(len([x for x in df.columns if word in x])))
-
-    data = pd.melt(data, id_vars=[group])
-
-    data.columns = ['group','time', 'val']
-
-    if time:
-        data['time'] = data['time'].replace(sorted(list(set(data['time'].dropna()))), time)
-
-    else:
-        pass
-
-    if pict:
-        sns.set(style='whitegrid')
-        f, ax = plt.subplots(figsize = figsize)
-        g = sns.pointplot(x="time", 
-            y="val", 
-            hue = 'group', 
-            data=data,
-            ci=None,
-            dodge=True)
-        plt.ylabel(name)
-        plt.xlabel('Визит')
-        g.legend().set_title(None)
-        plt.tight_layout()
-
-        plt.show()
-
-        if pict_sav:
-            g.figure.savefig(name  + ' - anova plot.png', bbox_inches='tight')
-
-    if transform == 'log':
-        try:
-            data['val'] = data['val'] + 0.001
-            data['val'] = np.log(data['val'])
-        except:
-            print('Log error!')
-
-    elif transform == 'bc':
-        try:
-            data['val'] = data['val'] + 0.001
-            data['val'], _ = boxcox(data['val'])
-        except:
-            print('Box-Cox error!')
-
-    elif transform == 'rank':
-        try:
-            data['val'] = data['val'].rank()
-        except:
-            print('Rank error!')
-    else:
-        pass
-
-    data['time'] = data['time'].astype(int)
-
-    data = data.groupby(['group','time']).mean('val').reset_index()
-
-    data['uin'] = data.index
-
-    fam = sma.families.Gaussian()
-
-    ind = sma.cov_struct.Autoregressive()
-
-    if model == 'mixed':
-        mod = mixedlm("val ~ C(group) + time + C(group)*time", data, groups=data["uin"], re_formula="~C(group)").fit()
-        #mod = mixedlm("val ~ C(group) + time + C(group)*time", data, groups=data["uin"]).fit()
-
-    else:
-        mod = gee("val ~ C(group) + time + C(group)*time", "uin", data, cov_struct=ind, family=fam).fit()
-
-    return(mod.summary()) 
 
 """
 Feron times of categoricals
