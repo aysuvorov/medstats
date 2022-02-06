@@ -336,9 +336,9 @@ def mixed_repeated_category(df, group, word, name, pict=True, pict_sav=False):
     
     return(mod.summary())
 
-## ANOVA RM type III for numerics through R magic
+## Mixed models for numerics through R magic
 
-def mixed_repeated_numeric(df, uin, group, word, name, transform='log', pict=True, pict_sav=False, print_contrasts=True):
+def mixed_repeated_numeric(df, uin, group, word):
     """
     Создание смешанных линейных моделей для оценки взаимодействия времени и группы
     
@@ -360,49 +360,14 @@ def mixed_repeated_numeric(df, uin, group, word, name, transform='log', pict=Tru
     col_lst = [group, uin] + [x for x in df.columns if word in x]
 
     data = df[col_lst].copy()
+    
     data.columns = [group, uin] + list(range(len([x for x in df.columns if word in x])))
+
     data = pd.melt(data, id_vars=[group, uin])
-    data.columns = ['group','id','time', 'val']
 
-    if pict:
-        sns.set(style='whitegrid')
-        g = sns.pointplot(x="time", 
-            y="val", 
-            hue = 'group', 
-            data=data,
-            ci=None,
-            dodge=True)
-        plt.ylabel(name)
-        plt.xlabel('Визит')
-        g.legend().set_title(None)
-        plt.show()
-
-        if pict_sav:
-            g.figure.savefig(name  + ' - anova plot.png', bbox_inches='tight')
-
-    if transform == 'log':
-        try:
-            data['val'] = data['val'] + 0.001
-            data['val'] = np.log(data['val'])
-        except:
-            print('Log error!')
-
-    elif transform == 'bc':
-        try:
-            data['val'] = data['val'] + 0.001
-            data['val'], _ = boxcox(data['val'])
-        except:
-            print('Box-Cox error!')
-
-    elif transform == 'rank':
-        try:
-            data['val'] = data['val'].rank()
-        except:
-            print('Rank error!')
-    else:
-        data['val'] = data['val'].astype(float)
-
-    data['time'] = data['time'].astype('category')
+    data.columns = ['group','uin','time', 'val']
+    
+    data['time'] = data['time'].astype(float)
 
     for col in [x for x in data.columns if pd.CategoricalDtype.is_dtype(data[x]) == True]:
         data[col] = data[col].astype(str)
@@ -411,44 +376,21 @@ def mixed_repeated_numeric(df, uin, group, word, name, transform='log', pict=Tru
     with localconverter(ro.default_converter + pandas2ri.converter):
         env['data'] = ro.conversion.py2rpy(data)
 
-
     A = ro.r('''
 
     library('emmeans')
-    library('afex')
+    library('lme4')
+    library('lmerTest')
 
-    data$UIN = factor(data$id)
-    data$group = factor(data$group)
-    data$time = factor(data$time)
+    #data$uin = factor(data$uin)
+    #data$group = factor(data$group)
+    data$time = as.numeric(data$time)
 
-    fit_afex = aov_ez("id", "val", data=data, between = "group", within = "time", check_contrasts=TRUE)
-    print(summary(fit_afex))
+    model = lmer( val ~ group + time + group*time + ( 1 + time|uin), data=data)
+    print(summary(model))
 
 
         ''')
-
-    if print_contrasts:
-        #print(A)
-        
-
-    #else:
-        B = ro.r('''
-
-        #print('EMMEANS')
-
-        #r1 <- emmeans(fit_afex, ~time*group)
-        #print(r1)
-        #print(emmeans(r1, 'group', contr = "pairwise"))
-        #print(emmeans(r1, 'time', contr = "pairwise"))
-        #B = emmeans(r1, c('group', 'time'), contr = "pairwise")
-        #print(B)
-        #print(confint(B))
-            ''')
-
-        
-        #print(A, '\n')
-        print(B)
-
 
 
 def mixed_repeated_numeric_2(df, group, word, name, 
