@@ -18,6 +18,7 @@ import rpy2.robjects.numpy2ri as rpyn
 rpyn.activate()
 
 from lifelines import CoxPHFitter
+from scipy import interpolate
 from rpy2.robjects.packages import importr
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects import pandas2ri, FloatVector, IntVector, FactorVector, Formula
@@ -120,14 +121,16 @@ class ModPerformance(object):
         AUC *= 0.5
 
         if AUC < 0.5:
-            self.real = (self.real - 1)*-1     
+            self.real = (self.real - 1)*-1    
+        self.roc = ROC
+
 
     def auc(self):  
         result = proc.ci(FloatVector(self.real), FloatVector(self.pred))
         return(result[1], result[0], result[2])
 
 
-    def thresholds(real, pred):
+    def thresholds_(real, pred):
 
         brier = brier_score_loss(real, pred)
 
@@ -169,15 +172,30 @@ class ModPerformance(object):
 
         g = pd.DataFrame()
         for score in sorted(list(set(self.pred))):
-            faf = thresholds(self.real, np.array(self.pred >= score))    
+            faf = ModPerformance.thresholds_(self.real, np.array(self.pred >= score))    
             g = pd.concat([g, faf], axis=1)
         g.columns = sorted(list(set(self.pred)))
         g = g.T.reset_index()
         g.rename(columns={'index':'Thres'}, inplace=True)
-        return(g)
+        self.thres = g
+        return(self.thres)
 
     def plot_roc(self, title=None):
         auc_plotter_numeric(self.real, self.pred, title=title)
+
+    def intrplt(self, se=None, sp=None):
+
+        g = ModPerformance.threshold_getter(self)
+
+        if se:
+            f = interpolate.interp1d(g['Se'], g['Sp'])
+            print('Sp : ')
+            return([f(sp), binomtest(int(f(sp)*100), n=100).proportion_ci()])
+        elif sp:
+            f = interpolate.interp1d(g['Sp'], g['Se'])
+            print('Se : ')
+            return([f(se), binomtest(int(f(se)*100), n=100).proportion_ci()])
+
 
 #+-------------------------------------------------------------------
 """
