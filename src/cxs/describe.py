@@ -102,7 +102,28 @@ def dplyr_filter(df, filter_var, value_lst):
     index_lst = [i for part in value_lst for i in df[df[filter_var] == part].index ]
     return df.loc[index_lst, :]
 
-# +----------------------------------------------------------------------------------
+"""
+Dummification with NaN preserved
+"""
+
+def dummy_serie(df, col):
+    tab = pd.get_dummies(df[col], prefix = col)
+    tab.loc[df[col].isnull(), tab.columns.str.startswith(str(col))] = np.nan
+    return(tab)
+
+def dummification(df, cat_vars):
+    data = df[cat_vars]
+    tab = pd.DataFrame()
+    for col in data:
+        tab = pd.concat([dummy_serie(df, col), tab], axis = 1)
+    
+    tab = tab[tab.columns[::-1]]
+    df =df.drop(columns = cat_vars)
+    df = pd.concat([df, tab], axis = 1)
+        
+    return(df)
+
+
 # +----------------------------------------------------------------------------------
 
 """
@@ -645,28 +666,6 @@ def compare_table_3g(
         
     else:
         return(tab)
-
-
-"""
-Dummification with NaN preserved
-"""
-
-def dummy_serie(df, col):
-    tab = pd.get_dummies(df[col], prefix = col)
-    tab.loc[df[col].isnull(), tab.columns.str.startswith(str(col))] = np.nan
-    return(tab)
-
-def dummification(df, cat_vars):
-    data = df[cat_vars]
-    tab = pd.DataFrame()
-    for col in data:
-        tab = pd.concat([dummy_serie(df, col), tab], axis = 1)
-    
-    tab = tab[tab.columns[::-1]]
-    df =df.drop(columns = cat_vars)
-    df = pd.concat([df, tab], axis = 1)
-        
-    return(df)
 
 
 """
