@@ -1,14 +1,12 @@
+"""Basic biostatistical module"""
 
 import numpy as np
 import pandas as pd
 import scipy.stats as st
 from seaborn import palettes
-#import statsmodels as sm
-#import statsmodels.api as sma
 import matplotlib.pyplot as plt
 import seaborn as sns
 import rpy2
-#import statsmodels.stats.api as sms
 
 from unicodedata import normalize
 from scipy.stats.stats import ttest_ind
@@ -35,13 +33,7 @@ rpyn.activate()
 stats = importr('stats')
 base = importr('base')
 
-# import sys
-# sys.path.append('/home/guest/Документы/medstats/src/cxs')
-# from importlib import reload
-
 # +----------------------------------------------------------------------------------
-# +----------------------------------------------------------------------------------
-
 
 """
 Data cleaners and mess organizers
@@ -49,7 +41,7 @@ Data cleaners and mess organizers
 
 def columnn_normalizer(df, col_lst):
     """
-    Удаление бешеных разделителей в колонках
+    Удаление неверных разделителей в колонках
     """
     for col in col_lst:
         for i in range(len(df[col])):
@@ -81,23 +73,12 @@ def column_categorical(df, col_lst):
 
 
 def miss_counter(data):
-
     missing_df = pd.DataFrame(data.isnull().sum())
     missing_df.columns = ['Miss_abs_counts']
     missing_df['Valid_abs_counts'] = data.shape[0] - missing_df['Miss_abs_counts']
     missing_df['Miss_Rates,%'] = missing_df['Miss_abs_counts']/data.shape[0]
     missing_df['Valid_Rates,%'] = missing_df['Valid_abs_counts']/data.shape[0]
     return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 'Miss_Rates,%']])
-
-
-def p_adjust(vector, n, method = 'BH'):
-
-    vector = FloatVector(np.asarray(vector))
-    new_vec = []
-    for i in vector:
-        new_vec = new_vec + [float(stats.p_adjust(i, n=n, metho=method))]
-
-    return new_vec
 
 
 def dplyr_filter(df, filter_var, value_lst):
@@ -127,6 +108,16 @@ def dplyr_filter(df, filter_var, value_lst):
 """
 Descriptive statistics
 """
+## p-value adjustment
+
+def p_adjust(vector, n, method = 'BH'):
+    vector = FloatVector(np.asarray(vector))
+    new_vec = []
+    for i in vector:
+        new_vec = new_vec + [float(stats.p_adjust(i, n=n, metho=method))]
+    return new_vec
+
+
 ## Simple descriptives
 
 def series_num_summary(d, digits):
@@ -751,7 +742,6 @@ def binary_95CI(df, cat_vars):
     return(data.reindex(columns=['Фактор', 'Point', '2.5% CI', '97.5% CI']))
 
 # +----------------------------------------------------------------------------------
-# +----------------------------------------------------------------------------------
 
 """
 Graphics
@@ -922,8 +912,7 @@ def polar_plot_circular(
         a = a + abs(coeff)
         n = n + [a]
 
-    ##########################################
-    ##### Filler
+    # Filler
 
     for col, bot, fill_color in zip(cols, n, ['No symptoms'] + [None]*(len(cols) - 1)):
 
@@ -948,7 +937,7 @@ def polar_plot_circular(
             alpha=0.5, label=fill_color)
         
 
-    #### Plot ###############################
+    # Plot 
 
     for col, bot, color in zip(cols, n, ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
               '#9467bd', '#8c564b', '#e377c2', 'lightgreen',
@@ -975,7 +964,7 @@ def polar_plot_circular(
             label=col)
         #ax.legend()
 
-    ##### NANS #######################################
+    # NANS 
 
     for col, bot, labelz in zip(cols, n, ['Missing data'] + [None]*(len(cols) - 1)):
 
@@ -1036,19 +1025,4 @@ def polar_plot_circular(
 
     if save:
         plt.savefig(figname + ".png")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
