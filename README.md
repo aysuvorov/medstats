@@ -2,8 +2,6 @@
 
 Python module for medical statistics. 
 
-
-
 ## `describe.py`
 
 Main module for summary descriprive statistics and comparative analysis.
@@ -46,8 +44,6 @@ Main module for summary descriprive statistics and comparative analysis.
 
 - `polar_plot_circular` - plots radial circular plot alike [this](https://i.stack.imgur.com/w5TtL.png)
 
-
-
 ## `regressions.py`
 
 - `ModPerformance` - class for model performance evaluation
@@ -55,3 +51,31 @@ Main module for summary descriprive statistics and comparative analysis.
   - `auc` - computes AUC and 95% CI (DeLong) - using R's `pROC` library
   
   - `threshold_getter` - returns the dataframe with thresholds for numeric var/predictions and Se, Sp, PPV, NPV, Brier score, LR+, LR-.
+  
+  - `plot_roc` - plots AUC
+  
+  - `intrplt` - interpolates Sens/Spec when needed fixed Senc or Spec threshold
+
+- `onedim_logregr` - univariate logistic regressions
+
+- `onedim_coxregr` - univariate COX regressions
+
+- `step_mass_R` - R stepwise selection algorithm using logistic regression
+
+- `cox_multi` & `odds_multi` - COX and logistic multivariate models
+
+## `matchit.py`
+
+- `matchit` - propensity score matching algorithm using R's `MatchIt` library
+
+## `parenclitic_oop.py`
+
+Parenclitic network analysis and A.Gorban correlation graphs
+
+- class`Zanin` - creates and fits Zanin parenclitic graphs
+
+- class`Gorban` - creates and fits Gorban correlation graphs
+
+- `graph_plotter` - plots individual graphs
+
+
