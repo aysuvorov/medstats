@@ -2,13 +2,6 @@
 
 Python module for medical statistics. 
 
-- [Medstats python module](#medstats-python-module)
-  * [`describe.py`](#-describepy-)
-  * [`regressions.py`](#-regressionspy-)
-  * [`matchit.py`](#-matchitpy-)
-  * [`parenclitic_oop.py`](#-parenclitic-ooppy-)
-
-<small><i><a href='http://ecotrust-canada.github.io/markdown-toc/'>Table of contents generated with markdown-toc</a></i></small>
 
 
 ## `describe.py`
