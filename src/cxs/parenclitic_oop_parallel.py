@@ -12,9 +12,9 @@ from sklearn import preprocessing
 from sklearn.preprocessing import StandardScaler
 warnings.filterwarnings("ignore")
 
-##########################
+#+----------------------------------------------
 ######### Classes ########
-##########################
+
 
 class DataFrameLoader(object):
     
@@ -163,7 +163,7 @@ class ZaninDict(object):
 
         return graphs
 
-
+#+----------------------------------------------
 class Zanin(object):
     """ 
     clf = prct.Zanin(X_healthy, nodes_lst)
@@ -205,10 +205,10 @@ class Zanin(object):
         self.graphs = ZaninDict.fit(newdata, self.healthy)
         print('Zanin dict of graphs is ready ...')
 
-
-##########################
+        
+#+----------------------------------------------
 #### Common functions ####
-##########################
+
 
 def graph_plotter(
     G, 
@@ -270,35 +270,7 @@ def graph_plotter(
         plt.savefig(title + '.png')#, bbox_inches="tight", transparent=False)
 
     plt.show()
-    
-    
 
-
-
-### Not implemented ###
-""" class ZaninGraf(object):
-
-    def __init__(
-            self, 
-            networkx_graph: nx.classes.graph.Graph
-        ) -> None:
-        self.graph = networkx_graph
-
-    @classmethod
-    def fit(
-            cls,
-            features: Features,
-            weights: CorrModel,
-            threshold: float = 0
-        ) -> nx.classes.graph.Graph:
-
-        G = nx.Graph()
-        G.add_nodes_from(features.nodes)
-
-        for e, w in zip(features.tuples_lst, weights.weights):
-            if threshold < float(w): 
-                G.add_edge(e[0], e[1], weight = w)   
-        return(ZaninGraf(G)) """
 
 
 
