@@ -2,8 +2,6 @@
 
 Python module for medical statistics. 
 
-
-
 ## `describe.py`
 
 Main module for summary descriprive statistics and comparative analysis.
