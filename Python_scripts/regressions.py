@@ -80,7 +80,6 @@ def auc_plotter_numeric(real, pred, title=None):
         plt.title('ROC curve, AUC = %.3f'%AUC)
     plt.show()
 
-    
 #+-------------------------------------------------------------------
 class ModPerformance(object):
 
@@ -199,16 +198,22 @@ class ModPerformance(object):
 
 
 #+-------------------------------------------------------------------
-### Regressions ###
-
+"""
+Regressions
+"""
 
 # Univariate logistic with/without adjustments
 
 def onedim_logregr(df, group, adj = False, adj_cols_lst = None):
+
     logregr = pd.DataFrame()
+
     columns = [x for x in df.columns if x != group]
+
     if adj:
+
         for col in columns:
+
             tb = df[[col, group] + adj_cols_lst].dropna()
 
             try:
@@ -233,7 +238,9 @@ def onedim_logregr(df, group, adj = False, adj_cols_lst = None):
             logregr = logregr.append({'Names': col, 'OR': params, 'lower': conf0, 'upper': conf1,'p_val': round(p, 3)}, ignore_index=True).reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])
 
     else:
+
         for col in columns:
+
             tb = df[[col, group]].dropna()
 
             try:
@@ -249,15 +256,15 @@ def onedim_logregr(df, group, adj = False, adj_cols_lst = None):
                 p = result.pvalues[1]
 
             except:
+
                 params = 'NA'
                 conf0 = 'NA'
                 conf1 = 'NA'
                 p = 1
 
-            logregr = logregr.append({'Names': col, 'OR': params, 'lower': conf0, 'upper': conf1,'p_val': round(p, 3)}, \
-                                     ignore_index=True).reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])
-    return(logregr)
+            logregr = logregr.append({'Names': col, 'OR': params, 'lower': conf0, 'upper': conf1,'p_val': round(p, 3)}, ignore_index=True).reindex(columns=['Names', 'OR', 'lower', 'upper', 'p_val'])
 
+    return(logregr)
 
 # Univariate COX with/without adjustments
 
@@ -284,8 +291,8 @@ def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
                 conf0 = 'NA'
                 conf1 = 'NA'
 
-            coxregr = coxregr.append({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, \
-                                      'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
+            coxregr = coxregr.append({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
+
         coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
     else:
         for col in columns:
@@ -302,17 +309,18 @@ def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
                 conf0 = 'NA'
                 conf1 = 'NA'
 
-            coxregr = coxregr.append({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, \
-                                      'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
-        coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
-    return(coxregr)
+            coxregr = coxregr.append({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, ignore_index=True)
 
+        coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+
+    return(coxregr)
 
 ## Stepwise - logistic regression from MASS package
 
-
 def step_mass_R(df, point, k=3.58):
+
     tb = df.copy()
+
     for col in [x for x in tb.columns if pd.CategoricalDtype.is_dtype(tb[x]) == True]:
         tb[col] = tb[col].astype(str)
         tb[col] = tb[col].astype('category')
@@ -325,11 +333,14 @@ def step_mass_R(df, point, k=3.58):
     f = stats.glm(point + ' ~ .', family = 'binomial', data = r_df)
     m = stats.step(f, k = k, trace=False) 
     mod_lst = list(base.all_vars(stats.formula(m)))[1:]
+    
     return(mod_lst)
 
 
 def cox_multi(df, mod_lst, duration, point, style='ascii', check_proportional=True):
+
     cph = CoxPHFitter()
+
     model = cph.fit(df[mod_lst + [duration, point]] , duration_col=duration, event_col=point)
     b = model.print_summary(style=style, columns=['exp(coef)', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'p'], decimals=3)
 
@@ -340,9 +351,10 @@ def cox_multi(df, mod_lst, duration, point, style='ascii', check_proportional=Tr
     
     return([b,c])
 
-
 def odds_multi(df, mod_lst, point):
+
     model = sma.Logit(df[point], sma.add_constant(df[mod_lst])).fit()
+
     b = model.summary()
 
     params = round(np.exp(model.params)[1:],2)

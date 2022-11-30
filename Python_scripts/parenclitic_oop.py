@@ -13,9 +13,9 @@ from sklearn.preprocessing import StandardScaler
 from scipy.stats import pearsonr, spearmanr
 warnings.filterwarnings("ignore")
 
-#+----------------------------------------------
+##########################
 ######### Classes ########
-
+##########################
 
 ######### Zanin parenclitic graphs #######
 
@@ -225,7 +225,6 @@ class GraphBasket(object):
                     columns=columns
                 )
 
-#+----------------------------------------------
 ######### Gorban correlation graphs #######
 
 class CorrModel(Model):
@@ -300,7 +299,7 @@ class CorrGraf(object):
                 G.add_edge(e[0], e[1], weight = w)
         return(CorrGraf(G))       
 
-#+----------------------------------------------                 
+##### Classes to make it all work #######                    
 ## For Zanin ##
 
 class Zanin(object):
@@ -374,7 +373,6 @@ class DataFitter(object):
         self.graphs.compute()
         return self.graphs.chars
 
-#+----------------------------------------------
 ## For Gorban ##
 
 class Gorban(object):
@@ -436,11 +434,10 @@ class Gorban(object):
         if verbose:
             print('Corrs fitted successfully')
             print('Gorban is ready ...')
-
-            
-#+----------------------------------------------
+        
+##########################
 #### Common functions ####
-
+##########################
 
 def graph_plotter(
     G, 

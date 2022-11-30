@@ -1,12 +1,14 @@
-"""Basic biostatistical module"""
 
 import numpy as np
 import pandas as pd
 import scipy.stats as st
 from seaborn import palettes
+#import statsmodels as sm
+#import statsmodels.api as sma
 import matplotlib.pyplot as plt
 import seaborn as sns
 import rpy2
+#import statsmodels.stats.api as sms
 
 from unicodedata import normalize
 from scipy.stats.stats import ttest_ind
@@ -33,7 +35,17 @@ rpyn.activate()
 stats = importr('stats')
 base = importr('base')
 
+# import sys
+# sys.path.append('/home/guest/Yandex.Disk/GitHub/medstats/src/cxs')
+# from importlib import reload
+# import describe as descr
+
+# import warnings
+# warnings.filterwarnings("ignore")
+
 # +----------------------------------------------------------------------------------
+# +----------------------------------------------------------------------------------
+
 
 """
 Data cleaners and mess organizers
@@ -41,7 +53,7 @@ Data cleaners and mess organizers
 
 def columnn_normalizer(df, col_lst):
     """
-    Удаление неверных разделителей в колонках
+    Удаление бешеных разделителей в колонках
     """
     for col in col_lst:
         for i in range(len(df[col])):
@@ -62,7 +74,7 @@ def columnn_normalizer(df, col_lst):
     return(df)
 
 
-def column_categorical(df, col_lst):
+def column_factorizer(df, col_lst):
     for col in df.columns:
         if col in col_lst:
             df[col] = df[col].astype('category')
@@ -70,15 +82,36 @@ def column_categorical(df, col_lst):
             pass
     
     return(df)
+ 
+
+def factorizer(df, col_lst, num_lst):
+    for col in col_lst:
+        df[col] = df[col].astype('category')
+
+    for num in num_lst:
+        df[col] = df[col].astype(float)
+    
+    return(df)
 
 
 def miss_counter(data):
+
     missing_df = pd.DataFrame(data.isnull().sum())
     missing_df.columns = ['Miss_abs_counts']
     missing_df['Valid_abs_counts'] = data.shape[0] - missing_df['Miss_abs_counts']
     missing_df['Miss_Rates,%'] = missing_df['Miss_abs_counts']/data.shape[0]
     missing_df['Valid_Rates,%'] = missing_df['Valid_abs_counts']/data.shape[0]
     return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 'Miss_Rates,%']])
+
+
+def p_adjust(vector, n, method = 'BH'):
+
+    vector = FloatVector(np.asarray(vector))
+    new_vec = []
+    for i in vector:
+        new_vec = new_vec + [float(stats.p_adjust(i, n=n, metho=method))]
+
+    return new_vec
 
 
 def dplyr_filter(df, filter_var, value_lst):
@@ -109,6 +142,8 @@ Dummification with NaN preserved
 def dummy_serie(df, col):
     tab = pd.get_dummies(df[col], prefix = col)
     tab.loc[df[col].isnull(), tab.columns.str.startswith(str(col))] = np.nan
+    for col in tab:
+        tab[col] = tab[col].astype('category')
     return(tab)
 
 def dummification(df, cat_vars):
@@ -123,22 +158,12 @@ def dummification(df, cat_vars):
         
     return(df)
 
-
+# +----------------------------------------------------------------------------------
 # +----------------------------------------------------------------------------------
 
 """
 Descriptive statistics
 """
-## p-value adjustment
-
-def p_adjust(vector, n, method = 'BH'):
-    vector = FloatVector(np.asarray(vector))
-    new_vec = []
-    for i in vector:
-        new_vec = new_vec + [float(stats.p_adjust(i, n=n, metho=method))]
-    return new_vec
-
-
 ## Simple descriptives
 
 def series_num_summary(d, digits):
@@ -324,7 +349,10 @@ def compare_category(df, group, var, auto_c='auto'):
                 test_name = 'не применим'
 
         else:
-            p = chi2_contingency(mtx, correction=True)[1]
+            try:
+                p = chi2_contingency(mtx, correction=True)[1]
+            except:
+                p = 1
             test_name = 'Chi'
 
     tb = pd.DataFrame({'Фактор': name,
@@ -741,6 +769,7 @@ def binary_95CI(df, cat_vars):
     return(data.reindex(columns=['Фактор', 'Point', '2.5% CI', '97.5% CI']))
 
 # +----------------------------------------------------------------------------------
+# +----------------------------------------------------------------------------------
 
 """
 Graphics
@@ -763,7 +792,7 @@ def dist_box(df, var, label = None, label_X = None, label_Y = 'Количест�
 
 ## draw every variable without grouping (boxplots / barplots)
 
-def draw_data_frame(df, col_lst):
+def draw_data_frame(df, col_lst, pict_sav=True):
 
     for col in col_lst:
         if pd.CategoricalDtype.is_dtype(df[col]) == True:
@@ -776,12 +805,15 @@ def draw_data_frame(df, col_lst):
                 fig, ax = plt.subplots(figsize=(7,7))
                 g = sns.barplot(data=B, x=col, y='Доля, %', ax=ax)
                 for p in g.patches:
-                    g.annotate(format(p.get_height(), '.1f'), 
+                    g.annotate(
+                        str(format(p.get_height(), '.1f')) + ' %', 
                     (p.get_x() + p.get_width() / 2., p.get_height()), 
                     ha = 'center', va = 'center', 
                     xytext = (0, 9), 
                     textcoords = 'offset points')
                 plt.show()
+                if pict_sav:
+                    g.figure.savefig(col  + '.png')
 
             else: pass
         
@@ -789,18 +821,22 @@ def draw_data_frame(df, col_lst):
             sns.set(style = 'whitegrid')
             fig, (ax_box, ax_hist) = plt.subplots(2, sharex=True, figsize = (7, 7), gridspec_kw={"height_ratios": (.15, .85)})
             sns.boxplot(df[col], ax=ax_box, color = 'lightblue')
-            sns.histplot(df[[col]], ax = ax_hist, color = 'blue', bins = 10, kde = True, label='_nolegend_')
+            g = sns.histplot(df[[col]], ax = ax_hist, color = 'blue', bins = 10, kde = True, label='_nolegend_')
             ax_hist.set(xlabel=col)
             ax_hist.get_legend().remove()
             plt.ylabel('Количество наблюдений')
             ax_box.set(xlabel='')
             plt.show()
+            if pict_sav:
+                g.figure.savefig(col  + '.png')
 
 ## draw every variable with grouping (boxplots / barplots)
 
-def draw_data_frame_group(df, col_lst, group, pict_sav=True):
+def draw_data_frame_group(df, col_lst, group, pict_sav=True, add_number=True):
 
-    for col in col_lst:
+    names = [str(x) + ' ' for x in  np.array(range(1, len(col_lst) + 1))]
+
+    for col, name in zip(col_lst, names):
         if pd.CategoricalDtype.is_dtype(df[col]) == True:
             if len(set(df[col].dropna())) < 6:
 
@@ -816,24 +852,31 @@ def draw_data_frame_group(df, col_lst, group, pict_sav=True):
                 #ax.legend([],[], frameon=False)
                 g.legend_.set_title(None)
                 for p in g.patches:
-                    g.annotate(format(p.get_height(), '.1f'), 
+                    g.annotate(
+                        str(format(p.get_height(), '.1f')) + (' %'), 
                     (p.get_x() + p.get_width() / 2., p.get_height()), 
                     ha = 'center', va = 'center', 
                     xytext = (0, 9), 
                     textcoords = 'offset points')
+
                 plt.legend(bbox_to_anchor=(1.01, 1),borderaxespad=0)## легенда снаружи
                 plt.xlabel('')
                 plt.ylabel(col)
                 plt.show()
 
                 if pict_sav:
-                    g.figure.savefig(col  + '.png')
+                    if '/' in col:
+                        col = col.replace('/', '_')
+                    if add_number:
+                        g.figure.savefig(name + col + '.png')
+                    else:
+                        g.figure.savefig(col  + '.png')
 
             else: pass
         
         else:
             sns.set(style='whitegrid')
-            fig, ax = plt.subplots(figsize=(5,6))
+            fig, ax = plt.subplots(figsize=(8,8))
             g=sns.boxplot(group, col, hue=group, data=df, ax=ax, dodge=False)
             ax.legend([],[], frameon=False)
             plt.ylabel(col)
@@ -841,7 +884,12 @@ def draw_data_frame_group(df, col_lst, group, pict_sav=True):
             plt.show()
 
             if pict_sav:
-                g.figure.savefig(col  + '.png')
+                if '/' in col:
+                    col = col.replace('/', '_')
+                if add_number:
+                    g.figure.savefig(name + col + '.png')
+                else:
+                    g.figure.savefig(col  + '.png')
 
 
 ## Bland Altman Plot
@@ -911,7 +959,8 @@ def polar_plot_circular(
         a = a + abs(coeff)
         n = n + [a]
 
-    # Filler
+    ##########################################
+    ##### Filler
 
     for col, bot, fill_color in zip(cols, n, ['No symptoms'] + [None]*(len(cols) - 1)):
 
@@ -936,7 +985,7 @@ def polar_plot_circular(
             alpha=0.5, label=fill_color)
         
 
-    # Plot 
+    #### Plot ###############################
 
     for col, bot, color in zip(cols, n, ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
               '#9467bd', '#8c564b', '#e377c2', 'lightgreen',
@@ -963,7 +1012,7 @@ def polar_plot_circular(
             label=col)
         #ax.legend()
 
-    # NANS 
+    ##### NANS #######################################
 
     for col, bot, labelz in zip(cols, n, ['Missing data'] + [None]*(len(cols) - 1)):
 
@@ -1024,4 +1073,19 @@ def polar_plot_circular(
 
     if save:
         plt.savefig(figname + ".png")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
