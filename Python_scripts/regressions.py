@@ -34,7 +34,7 @@ proc = importr('pROC')
 AUC, sensetivity, specificity
 """
 
-def auc_plotter_numeric(real, pred, title=None):
+def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):
 
     thresholds = np.sort(pred, axis=None)
 
@@ -75,10 +75,14 @@ def auc_plotter_numeric(real, pred, title=None):
     AUC *= 0.5
 
     if title:
-        plt.title(title)
+        plt.title(title + '\n\nAUC = %.3f'%AUC)
     else:
         plt.title('ROC curve, AUC = %.3f'%AUC)
-    plt.show()
+    if plot:
+        plt.show()
+
+    if save_name != '':
+        fig.savefig(save_name + '.png', facecolor='white', transparent=False)
 
 #+-------------------------------------------------------------------
 class ModPerformance(object):
