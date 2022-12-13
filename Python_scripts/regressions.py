@@ -26,13 +26,10 @@ from scipy.stats import binomtest
 
 
 """
-AUC, sensetivity, specificity
+AUC plots
 """
 
 def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):  
-
-    """_summary_
-    """    """"""
 
     if metrics.roc_auc_score(real, pred) < 0.5:
         real = np.abs(real-1)
@@ -79,121 +76,184 @@ def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):
     if save_name != '':
         fig.savefig(save_name + '.png', facecolor='white', transparent=False)
 
+
+def plot_multiclass_roc(real, pred, n_classes, title=None, plot=True, save_name=''):
+
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+    lw = 2
+    for i in range(n_classes):
+        fpr[i], tpr[i], _ = metrics.roc_curve(real[:, i], pred[:, i])
+        roc_auc[i] = auc(fpr[i], tpr[i])
+
+    fpr["micro"], tpr["micro"], _ = roc_curve(real.ravel(), pred.ravel())
+    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+
+    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
+
+    mean_tpr = np.zeros_like(all_fpr)
+    for i in range(n_classes):
+        mean_tpr += np.interp(all_fpr, fpr[i], tpr[i])
+
+    mean_tpr /= n_classes
+
+    fpr["macro"] = all_fpr
+    tpr["macro"] = mean_tpr
+    roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+
+    fig = plt.figure(figsize=(6,6))
+
+    colors = cycle(["red", "green", "blue", "orange", "gray"])
+    for i, color in zip(range(n_classes), colors):
+        plt.plot(
+            fpr[i],
+            tpr[i],
+            color=color,
+            lw=lw,
+            linestyle=":",
+            label="ROC curve of class {0} (AUC = {1:0.2f})".format(i, roc_auc[i]),
+        )
+
+    plt.plot([0, 1], [0, 1], "k--", lw=lw)
+    plt.xlim([-0.1, 1.0])
+    plt.ylim([-0.1, 1.05])
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.legend(loc="lower right")
+    plt.grid()
+
+    if title:
+        plt.title(title + '\n\nAUC = %.3f'%roc_auc["macro"])
+    else:
+        plt.title('ROC curve, AUC = %.3f'%roc_auc["macro"])
+    if plot:
+        plt.show()
+
+    if save_name != '':
+        fig.savefig(save_name + '.png', facecolor='white', transparent=False)
+
 #+-------------------------------------------------------------------
-class ModPerformance(object):
+# class ModPerformance(object):
 
-    def __init__(
-        self, 
-        real, 
-        pred
-        )-> None:
+#     def __init__(
+#         self, 
+#         real, 
+#         pred
+#         )-> None:
 
-        self.real = np.asarray(real)
-        self.pred = np.asarray(pred)
+#         self.real = np.asarray(real)
+#         self.pred = np.asarray(pred)
 
-        thresholds = np.sort(self.pred, axis=None)
+#         thresholds = np.sort(self.pred, axis=None)
 
-        ROC = np.zeros((len(self.real) + 2, 2))
-        ROC = np.append(ROC, [[1,1]],axis = 0)[::-1]
+#         ROC = np.zeros((len(self.real) + 2, 2))
+#         ROC = np.append(ROC, [[1,1]],axis = 0)[::-1]
 
-        for i in range(len(self.real)):
-            t = thresholds[i]
+#         for i in range(len(self.real)):
+#             t = thresholds[i]
 
-            # Classifier / label agree and disagreements for current threshold.
-            TP_t = np.logical_and( self.pred > t, self.real==1 ).sum()
-            TN_t = np.logical_and( self.pred <=t, self.real==0 ).sum()
-            FP_t = np.logical_and( self.pred > t, self.real==0 ).sum()
-            FN_t = np.logical_and( self.pred <=t, self.real==1 ).sum()
+#             # Classifier / label agree and disagreements for current threshold.
+#             TP_t = np.logical_and( self.pred > t, self.real==1 ).sum()
+#             TN_t = np.logical_and( self.pred <=t, self.real==0 ).sum()
+#             FP_t = np.logical_and( self.pred > t, self.real==0 ).sum()
+#             FN_t = np.logical_and( self.pred <=t, self.real==1 ).sum()
 
-            # Compute false positive rate for current threshold.
-            FPR_t = FP_t / float(FP_t + TN_t)
-            ROC[i+1,0] = FPR_t
+#             # Compute false positive rate for current threshold.
+#             FPR_t = FP_t / float(FP_t + TN_t)
+#             ROC[i+1,0] = FPR_t
 
-            # Compute true  positive rate for current threshold.
-            TPR_t = TP_t / float(TP_t + FN_t)
-            ROC[i+1,1] = TPR_t
+#             # Compute true  positive rate for current threshold.
+#             TPR_t = TP_t / float(TP_t + FN_t)
+#             ROC[i+1,1] = TPR_t
 
-        AUC = 0.
-        for i in range(len(self.real)):
+#         AUC = 0.
+#         for i in range(len(self.real)):
 
-            AUC += (ROC[i+1,0]-ROC[i,0]) * (ROC[i+1,1]+ROC[i,1]) * -1
-        AUC *= 0.5
+#             AUC += (ROC[i+1,0]-ROC[i,0]) * (ROC[i+1,1]+ROC[i,1]) * -1
+#         AUC *= 0.5
 
-        if AUC < 0.5:
-            self.real = (self.real - 1)*-1    
-        self.roc = ROC
-
-
-    def auc(self):  
-        result = proc.ci(FloatVector(self.real), FloatVector(self.pred))
-        return(result[1], result[0], result[2])
+#         if AUC < 0.5:
+#             self.real = (self.real - 1)*-1    
+#         self.roc = ROC
 
 
-    def thresholds_(real, pred):
+#     def auc(self):  
+#         result = proc.ci(FloatVector(self.real), FloatVector(self.pred))
+#         return(result[1], result[0], result[2])
 
-        brier = brier_score_loss(real, pred)
 
-        tn, fp, fn, tp = confusion_matrix(real, pred).ravel()
+#     def thresholds_(real, pred):
 
-        se = tp/(tp + fn)
-        se_ci = binomtest(int(se*100), n=100).proportion_ci()
-        sp = tn / (fp + tn)
-        sp_ci = binomtest(int(sp*100), n=100).proportion_ci()
-        npv = tn / (fn + tn)
-        try:
-            npv_ci = binomtest(int(npv*100), n=100).proportion_ci()
-        except:
-            npv_ci = [np.nan,np.nan]
-        ppv = tp / (tp + fp)
-        ppv_ci = binomtest(int(ppv*100), n=100).proportion_ci()
-        lr_pos = se/(1-sp)
-        lr_neg = (1-se)/sp
+#         brier = brier_score_loss(real, pred)
+
+#         tn, fp, fn, tp = confusion_matrix(real, pred).ravel()
+
+#         se = tp/(tp + fn)
+#         se_ci = binomtest(int(se*100), n=100).proportion_ci()
+#         sp = tn / (fp + tn)
+#         sp_ci = binomtest(int(sp*100), n=100).proportion_ci()
+#         npv = tn / (fn + tn)
+#         try:
+#             npv_ci = binomtest(int(npv*100), n=100).proportion_ci()
+#         except:
+#             npv_ci = [np.nan,np.nan]
+#         ppv = tp / (tp + fp)
+#         ppv_ci = binomtest(int(ppv*100), n=100).proportion_ci()
+#         lr_pos = se/(1-sp)
+#         lr_neg = (1-se)/sp
         
-        ind = ['Se', 'Se 95% CI', 'Sp', 'Sp 95% CI',
-            'PPV', 'PPV 95% CI', 'NPV', 'NPV 95% CI', 'LR+', 'LR-',
-            'Brier']
+#         ind = ['Se', 'Se 95% CI', 'Sp', 'Sp 95% CI',
+#             'PPV', 'PPV 95% CI', 'NPV', 'NPV 95% CI', 'LR+', 'LR-',
+#             'Brier']
 
-        return(pd.Series([se.round(3),
-            str(round(se_ci[0], 3)) + ' - ' + str(round(se_ci[1], 3)),
-            sp.round(3),
-            str(round(sp_ci[0], 3)) + ' - ' + str(round(sp_ci[1], 3)),
-            ppv.round(3),
-            str(round(ppv_ci[0], 3)) + ' - ' + str(round(ppv_ci[1], 3)),
-            round(npv,3),
-            str(round(npv_ci[0], 3)) + ' - ' + str(round(npv_ci[1], 3)),
-            lr_pos.round(3),
-            lr_neg.round(3),
-            brier.round(3)
-            ], index=ind)) 
+#         return(pd.Series([se.round(3),
+#             str(round(se_ci[0], 3)) + ' - ' + str(round(se_ci[1], 3)),
+#             sp.round(3),
+#             str(round(sp_ci[0], 3)) + ' - ' + str(round(sp_ci[1], 3)),
+#             ppv.round(3),
+#             str(round(ppv_ci[0], 3)) + ' - ' + str(round(ppv_ci[1], 3)),
+#             round(npv,3),
+#             str(round(npv_ci[0], 3)) + ' - ' + str(round(npv_ci[1], 3)),
+#             lr_pos.round(3),
+#             lr_neg.round(3),
+#             brier.round(3)
+#             ], index=ind)) 
 
 
-    def threshold_getter(self):
+#     def threshold_getter(self):
 
-        g = pd.DataFrame()
-        for score in sorted(list(set(self.pred))):
-            faf = ModPerformance.thresholds_(self.real, np.array(self.pred >= score))    
-            g = pd.concat([g, faf], axis=1)
-        g.columns = sorted(list(set(self.pred)))
-        g = g.T.reset_index()
-        g.rename(columns={'index':'Thres'}, inplace=True)
-        self.thres = g
-        return(self.thres)
+#         g = pd.DataFrame()
+#         for score in sorted(list(set(self.pred))):
+#             faf = ModPerformance.thresholds_(self.real, np.array(self.pred >= score))    
+#             g = pd.concat([g, faf], axis=1)
+#         g.columns = sorted(list(set(self.pred)))
+#         g = g.T.reset_index()
+#         g.rename(columns={'index':'Thres'}, inplace=True)
+#         self.thres = g
+#         return(self.thres)
 
-    def plot_roc(self, title=None):
-        auc_plotter_numeric(self.real, self.pred, title=title)
+#     def plot_roc(self, title=None):
+#         auc_plotter_numeric(self.real, self.pred, title=title)
 
-    def intrplt(self, se=None, sp=None):
+#     def intrplt(self, se=None, sp=None):
 
-        g = ModPerformance.threshold_getter(self)
+#         g = ModPerformance.threshold_getter(self)
 
-        if se:
-            f = interpolate.interp1d(g['Se'], g['Sp'])
-            print('Sp : ')
-            return([f(sp), binomtest(int(f(sp)*100), n=100).proportion_ci()])
-        elif sp:
-            f = interpolate.interp1d(g['Sp'], g['Se'])
-            print('Se : ')
-            return([f(se), binomtest(int(f(se)*100), n=100).proportion_ci()])
+#         if se:
+#             f = interpolate.interp1d(g['Se'], g['Sp'])
+#             print('Sp : ')
+#             return([f(sp), binomtest(int(f(sp)*100), n=100).proportion_ci()])
+#         elif sp:
+#             f = interpolate.interp1d(g['Sp'], g['Se'])
+#             print('Se : ')
+#             return([f(se), binomtest(int(f(se)*100), n=100).proportion_ci()])
+
+# +-----------------------------------------------------------------------------
+# +-----------------------------------------------------------------------------
+
+
+
 
 
 #+-------------------------------------------------------------------
