@@ -13,6 +13,9 @@ import pandas as pd
 import statsmodels.api as sma
 import matplotlib.pyplot as plt
 import seaborn as sns
+import rpy2.robjects as ro
+import rpy2.robjects.numpy2ri as rpyn
+rpyn.activate()
 
 from lifelines import CoxPHFitter
 from scipy import interpolate
@@ -23,20 +26,16 @@ from sklearn.metrics import roc_auc_score, roc_curve, brier_score_loss, confusio
 from scipy.stats import binomtest
 from scipy.stats import binomtest
 
+stats = importr('stats')
+base = importr('base')
+proc = importr('pROC')
 
 
 """
 AUC, sensetivity, specificity
 """
 
-def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):  
-
-    """_summary_
-    """    """"""
-
-    if metrics.roc_auc_score(real, pred) < 0.5:
-        real = np.abs(real-1)
-        print('Inverted class!')
+def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):
 
     thresholds = np.sort(pred, axis=None)
 
@@ -60,6 +59,7 @@ def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):
         TPR_t = TP_t / float(TP_t + FN_t)
         ROC[i+1,1] = TPR_t
 
+        # Plot the ROC curve.
     fig = plt.figure(figsize=(6,6))
     plt.plot(ROC[:,0], ROC[:,1], lw=2)
     plt.plot([[0,0], [1,1]], linestyle='--', c = 'gray')
@@ -69,10 +69,16 @@ def auc_plotter_numeric(real, pred, title=None, plot=True, save_name=''):
     plt.ylabel('True positive rate')
     plt.grid()
 
+    AUC = 0.
+    for i in range(len(real)):
+
+        AUC += (ROC[i+1,0]-ROC[i,0]) * (ROC[i+1,1]+ROC[i,1]) * -1
+    AUC *= 0.5
+
     if title:
-        plt.title(title + '\n\nAUC = %.3f'% metrics.roc_auc_score(real, pred))
+        plt.title(title + '\n\nAUC = %.3f'%AUC)
     else:
-        plt.title('ROC curve, AUC = %.3f'% metrics.roc_auc_score(real, pred))
+        plt.title('ROC curve, AUC = %.3f'%AUC)
     if plot:
         plt.show()
 
