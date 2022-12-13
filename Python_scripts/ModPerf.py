@@ -60,10 +60,13 @@ def ModPerf_Binary(real, pred, num_resamples = 1000):
     vals = []
     for i in range(num_resamples):
         a = np.array(random.choices(Y, k=len(Y)))
-        vals = vals + [list(_quality_point_est(
-            a[:,0], 
-            a[:,1]
-        ))]
+        try:
+            vals = vals + [list(_quality_point_est(
+                a[:,0], 
+                a[:,1]
+            ))]
+        except:
+            pass
 
     vals = np.array(vals)
 
@@ -93,6 +96,8 @@ def ModPerf_Multiclass(real, pred, num_resamples = 1000):
 
     
     def _quality_point_est_multiclass_macro(reals, preds):
+
+        lb = LabelBinarizer()
 
         cnf_matrix = metrics.confusion_matrix(reals, preds)
 
@@ -126,10 +131,13 @@ def ModPerf_Multiclass(real, pred, num_resamples = 1000):
     vals = []
     for i in range(num_resamples):
         a = np.array(random.choices(Y, k=len(Y)))
-        vals = vals + [list(_quality_point_est_multiclass_macro(
-            a[:,0], 
-            a[:,1]
-        ))]
+        try:
+            vals = vals + [list(_quality_point_est_multiclass_macro(
+                a[:,0], 
+                a[:,1]
+            ))]
+        except:
+            pass
 
     # return vals
     vals = np.array(vals)
@@ -200,16 +208,19 @@ def ROCPlotter_Binary(real, pred, title=None, plot=True, save_name=''):
 
 def ROCPlotter_Multiclass(real, pred, n_classes, title=None, plot=True, save_name=''):
 
+    if len(real.shape) < 2 or len(pred.shape) < 2:
+        raise ValueError('ERROR: real and pred vectors must be binarized!')
+
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
     lw = 2
     for i in range(n_classes):
         fpr[i], tpr[i], _ = metrics.roc_curve(real[:, i], pred[:, i])
-        roc_auc[i] = auc(fpr[i], tpr[i])
+        roc_auc[i] = metrics.auc(fpr[i], tpr[i])
 
-    fpr["micro"], tpr["micro"], _ = roc_curve(real.ravel(), pred.ravel())
-    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+    fpr["micro"], tpr["micro"], _ = metrics.roc_curve(real.ravel(), pred.ravel())
+    roc_auc["micro"] = metrics.auc(fpr["micro"], tpr["micro"])
 
     all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
 
@@ -221,7 +232,7 @@ def ROCPlotter_Multiclass(real, pred, n_classes, title=None, plot=True, save_nam
 
     fpr["macro"] = all_fpr
     tpr["macro"] = mean_tpr
-    roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
+    roc_auc["macro"] = metrics.auc(fpr["macro"], tpr["macro"])
 
     fig = plt.figure(figsize=(6,6))
 
@@ -253,3 +264,6 @@ def ROCPlotter_Multiclass(real, pred, n_classes, title=None, plot=True, save_nam
 
     if save_name != '':
         fig.savefig(save_name + '.png', facecolor='white', transparent=False)
+
+# +-----------------------------------------------------------------------------
+
