@@ -328,6 +328,8 @@ def ROCPlotter_Multiclass(real, pred, n_classes, title=None, plot=True, save_nam
         fig.savefig(save_name + '.png', facecolor='white', transparent=False)
 
 # +-----------------------------------------------------------------------------
+# The function calculates quality scores for thresholds
+
 
 def threshold_getter(real, pred):
 
