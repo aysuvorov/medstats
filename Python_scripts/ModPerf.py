@@ -37,7 +37,7 @@ def ModPerf_AUC(real, pred, num_resamples = 1000, ci95 = True):
     AUC = metrics.roc_auc_score(Y[:,0], Y[:,1])
 
     if AUC < 0.5:
-        print('Inverted real class!!!')
+        # print('Inverted real class!!!')
         
         Y[:,0] = np.abs(Y[:,0] - 1)
         AUC = metrics.roc_auc_score(Y[:,0], Y[:,1])
