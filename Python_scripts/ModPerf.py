@@ -25,12 +25,6 @@ warnings.filterwarnings("ignore")
 
 def ModPerf_AUC(real, pred, num_resamples = 1000, ci95 = True):
 
-
-
-
-
-
-
     if type(real) != np.ndarray:
         real = np.array(real)
 
@@ -337,7 +331,7 @@ def ROCPlotter_Multiclass(real, pred, n_classes, title=None, plot=True, save_nam
 # The function calculates quality scores for thresholds
 
 
-def threshold_getter(real, pred):
+def ModPerf_thresholds(real, pred):
 
     if type(real) != np.ndarray:
         real = np.array(real)
