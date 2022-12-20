@@ -21,3 +21,5 @@ ModPerf is a module that typical metrics known in medical trials for machine lea
 
 - `ROCPlotter_Binary` - plots AUC curve for binary classifier, probabilities for binary classifier, some quantitative variable;
 - `ROCPlotter_Multiclass` - plots AUC curve for multiclass classifier, probabilities for multiclass classifier;
+
+
