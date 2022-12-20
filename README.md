@@ -1,5 +1,10 @@
 # Medstats module
 
+## Describe
+
+Desribe is a module providing various basic statistical functions, plotting, comparative criterial approaches typically used in clinical trials.
+
+Module is under heavy readjustment.
 
 ## ModPerf
 

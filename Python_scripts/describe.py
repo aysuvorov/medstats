@@ -43,8 +43,8 @@ base = importr('base')
 # import warnings
 # warnings.filterwarnings("ignore")
 
-# +----------------------------------------------------------------------------------
-# +----------------------------------------------------------------------------------
+# +-----------------------------------------------------------------------------
+# +-----------------------------------------------------------------------------
 
 
 """
@@ -53,7 +53,7 @@ Data cleaners and mess organizers
 
 def columnn_normalizer(df, col_lst):
     """
-    Удаление бешеных разделителей в колонках
+    Removing crazy separators in columns
     """
     for col in col_lst:
         for i in range(len(df[col])):
@@ -72,24 +72,16 @@ def columnn_normalizer(df, col_lst):
             pass
     
     return(df)
-
-
-def column_factorizer(df, col_lst):
-    for col in df.columns:
-        if col in col_lst:
-            df[col] = df[col].astype('category')
-        else:
-            pass
-    
-    return(df)
  
 
 def factorizer(df, col_lst, num_lst):
-    for col in col_lst:
-        df[col] = df[col].astype('category')
-
-    for num in num_lst:
-        df[col] = df[col].astype(float)
+    if col_lst:
+        for col in col_lst:
+            df[col] = df[col].astype('category')
+    
+    if num_lst:
+        for num in num_lst:
+            df[col] = df[col].astype(float)
     
     return(df)
 
@@ -98,10 +90,12 @@ def miss_counter(data):
 
     missing_df = pd.DataFrame(data.isnull().sum())
     missing_df.columns = ['Miss_abs_counts']
-    missing_df['Valid_abs_counts'] = data.shape[0] - missing_df['Miss_abs_counts']
+    missing_df['Valid_abs_counts'] = data.shape[0] - \
+        missing_df['Miss_abs_counts']
     missing_df['Miss_Rates,%'] = missing_df['Miss_abs_counts']/data.shape[0]
     missing_df['Valid_Rates,%'] = missing_df['Valid_abs_counts']/data.shape[0]
-    return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 'Miss_Rates,%']])
+    return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 
+        'Miss_Rates,%']])
 
 
 def p_adjust(vector, n, method = 'BH'):
@@ -114,39 +108,19 @@ def p_adjust(vector, n, method = 'BH'):
     return new_vec
 
 
-def dplyr_filter(df, filter_var, value_lst):
-    """
-    Filters `filter_var` variable of df data frame and returns data frame
-    with only `value_lst` values in `filter_var`.
-    Works just as `dplyr filter()` function
-
-    Parameters
-    ----------
-    df: data frame
-    filter_var: variable to filter
-    value_lst: values to dtore in filter_var variable
-
-    Returns
-    -------
-    filtered pandas.DataFrame
-
-    """
-
-    index_lst = [i for part in value_lst for i in df[df[filter_var] == part].index ]
-    return df.loc[index_lst, :]
-
 """
 Dummification with NaN preserved
 """
 
-def dummy_serie(df, col):
-    tab = pd.get_dummies(df[col], prefix = col)
-    tab.loc[df[col].isnull(), tab.columns.str.startswith(str(col))] = np.nan
-    for col in tab:
-        tab[col] = tab[col].astype('category')
-    return(tab)
-
 def dummification(df, cat_vars):
+
+    def dummy_serie(df, col):
+        tab = pd.get_dummies(df[col], prefix = col)
+        tab.loc[df[col].isnull(), tab.columns.str.startswith(str(col))] = np.nan
+        for col in tab:
+            tab[col] = tab[col].astype('category')
+        return(tab)
+
     data = df[cat_vars]
     tab = pd.DataFrame()
     for col in data:
@@ -158,8 +132,8 @@ def dummification(df, cat_vars):
         
     return(df)
 
-# +----------------------------------------------------------------------------------
-# +----------------------------------------------------------------------------------
+# +-----------------------------------------------------------------------------
+# +-----------------------------------------------------------------------------
 
 """
 Descriptive statistics
@@ -711,9 +685,9 @@ def numerics_95CI(df, num_vars, statistic = 'automatic'):
         if statistic == 'automatic':
             test = shapiro(A)[1]
             if test < 0.05:
-                B = np.zeros(10000)
+                B = np.zeros(1000)
             
-                for i in range(0,10000):
+                for i in range(0,1000):
                     B[i] = np.median(np.random.choice(A, len(A)))
             
                 way = 'BS'
