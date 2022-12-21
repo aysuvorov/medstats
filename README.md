@@ -47,6 +47,11 @@ Various approaches for network analysis:
 - synolitic graphs;
 - correlation graphs for time series
 
+- `DataFrameLoader` - common class for loading data;
+- `Prct` - common class for parenclytic approach;
+- `Snltc` - common class for synolytic approach;
+- `Corr` - common class for correlation approach;
+
 ## `PhisioPatterns`
 
 - test module for time series and longitudinal data (ECG, EEG). Under heavy development;
