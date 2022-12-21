@@ -47,6 +47,8 @@ Various approaches for network analysis:
 - synolitic graphs;
 - correlation graphs for time series
 
+**Common classes**
+
 - `DataFrameLoader` - common class for loading data;
 - `Prct` - common class for parenclytic approach;
 - `Snltc` - common class for synolytic approach;
