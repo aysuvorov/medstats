@@ -20,6 +20,8 @@ Medstats is a child project of [**YASP!**](https://aysuvorov.github.io/) by [Ale
 
 Desribe is a module providing various basic statistical functions, plotting, comparative criterial approaches typically used in clinical trials.
 
+Module uses `rpy2`-module and basic `R` libraries.
+
 Module is under heavy readjustment.
 
 ## `ModPerf`
