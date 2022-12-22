@@ -244,6 +244,76 @@ class Snltc(object):
 
 
 ####################### Alexander Gorban correlation graphs ####################
+
+class Corr(object):
+
+    def __init__(self):
+        pass
+
+    def fit(self, data, method = 'spearman', threshold = None):
+
+        dfl = DataFrameLoader()
+        self.data = data
+        dfl.fit(self.data)
+        
+        self.nodes_lst = dfl.nodes_lst
+        self.edges_lst = dfl.edges_lst
+
+        self.new_epsilons = np.array([])
+
+        if method == 'pearson':
+
+            for pair in self.edges_lst:
+                weight, p_val = pearsonr(
+                    self.data[pair[0]], 
+                    self.data[pair[1]]
+                    )
+                if p_val < 0.05:
+                    weight = np.abs(weight)
+                else:
+                    weight = 0
+
+                self.new_epsilons = np.append(self.new_epsilons, weight)
+            
+        elif method == 'spearman':
+
+            for pair in self.edges_lst:
+                weight, p_val = spearmanr(
+                    self.data[pair[0]], 
+                    self.data[pair[1]]
+                    )
+                if p_val < 0.05:
+                    weight = np.abs(weight)
+                else:
+                    weight = 0
+
+                self.new_epsilons = np.append(self.new_epsilons, weight)
+
+        else:
+            raise KeyboardError('Method must be `pearson` or `spearman`')
+
+        if threshold:
+            np.place(self.new_epsilons, self.new_epsilons < threshold, 0) 
+
+
+    def ntwrk_construct(self, newindex=None):
+
+        if newindex:
+            self.index = newindex
+        else:
+            raise ValueError('Provide `newindex`!')
+
+        self.graphs = dict()  
+          
+        G = nx.Graph()
+        G.add_nodes_from(self.nodes_lst)
+        for edge, position in [[self.edges_lst[i],i] for i in range(len(self.edges_lst))]:
+            if float(self.new_epsilons[position]) != 0:
+                G.add_edge(edge[0], edge[1], weight = self.new_epsilons[position])
+
+        self.graphs[self.index] = G        
+
+        
 # 
 # Working sample
 # Under further development...
@@ -463,40 +533,12 @@ class Snltc(object):
 
 def graph_plotter(
     G, 
-    add_edge_labels = True, 
-    add_nodes_size = True,
-    figsize=(10,10), 
+    figsize=(8,8), 
     title='',
-    save = False
+    save = False,
+    node_width = 200,
+    edge_width = 1
     ):
-
-    """
-    Creates circular graph plot with node size 
-    (through weighted degree) and edge width depending
-    on edge weights
-
-    Parameters
-    ----------
-    :G: networkx.classes.graph.Graph
-
-    :add_edge_labels: bool
-        edge labels will be shown
-
-    :add_nodes_size: bool
-        node size will adjusted according to weighted
-        node degree * 50
-    
-    :figsize: set
-        set of plot size for matplotlib plt.subplots() function
-
-    :title: str
-        plot title
-
-    Returns
-    ----------
-    Plot of a graph
-
-    """
     
     pos = nx.circular_layout(G)   
 
@@ -507,19 +549,22 @@ def graph_plotter(
 
     plt.figure(figsize=figsize)
     plt.title(title)
+    plt.box(False)
+    
+    nx.draw_networkx_nodes(G, pos, node_color = 'orange', 
+        node_size = [v * node_width for v in degree_dict.values()])
+    nx.draw_networkx_labels(G, pos)
 
-    nx.draw(G, pos, with_labels = True, node_size=[v * 50 for v in degree_dict.values()])
+    for edge in G.edges(data='weight'):
+        nx.draw_networkx_edges(G, pos, edgelist=[edge], 
+        width=edge[2]*edge_width, alpha=0.5, edge_color="b")
 
-    if add_edge_labels:
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.5)
-
-    if add_nodes_size:
-        for edge in G.edges(data='weight'):
-            nx.draw_networkx_edges(G, pos, edgelist=[edge], width=edge[2])
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.5)
 
         
     if save:
-        plt.savefig(title, bbox_inches="tight", transparent=False)
+        plt.savefig(title, bbox_inches="tight", transparent=False, 
+            edgecolor = 'white', dpi = 300)
     
     else:
         plt.show()
