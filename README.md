@@ -51,7 +51,7 @@ Various approaches for network analysis:
 
 **Common classes**
 
-- `DataFrameLoader` - common class for loading data;
+- `DataFrameLoader` - common class for loading data (for all types of approaches);
 - `Prct` - common class for parenclytic approach;
 - `Snltc` - common class for synolytic approach;
 - `Corr` - common class for correlation approach;
