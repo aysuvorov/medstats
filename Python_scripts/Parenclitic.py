@@ -12,6 +12,8 @@ from sklearn.preprocessing import StandardScaler
 from seaborn import palettes
 from itertools import combinations
 from scipy.stats import pearsonr, spearmanr
+from sklearn.decomposition import PCA
+from numpy import linalg as LA
 warnings.filterwarnings("ignore")
 
 ############################## Parenclitic graphs ##############################
@@ -313,220 +315,7 @@ class Corr(object):
 
         self.graphs[self.index] = G        
 
-        
-# 
-# Working sample
-# Under further development...
-
-
-# class CorrModel(Model):
-#     """[summary]
-
-#     Args:
-#         Model ([type]): [description]
-#     """    
-#     def __init__(self, training_data, features):
-#         super().__init__(training_data, features)
-
-#     def fit(self) -> None:
-#         """[summary]
-#         """        
-#         self.weights = []
-        
-#         for i in self.tuples_lst:
-#             par = pearsonr(
-#                     self.training_data[i[0]], 
-#                     self.training_data[i[1]]
-#                     )
-#             #par = spearmanr(
-#             #        self.training_data[i[0]], 
-#             #        self.training_data[i[1]]
-#             #        )
-
-#             weight = abs(par[0])
-#             #par = pearsonr(
-#             #        self.training_data[i[0]], 
-#             #        self.training_data[i[1]]
-#             #    )
-#             #if par[1] < 0.05: 
-#             #    weight = abs(par[0])
-#             #else: 
-#             #    weight = 0
-
-#                 #spearmanr(
-#                 #    self.training_data[i[0]],
-#                 #    self.training_data[i[1]]
-#                 #)[0]
-
-#             #)
-#             self.weights = self.weights + [weight]
-#         self.weights = np.array(self.weights)
-
-
-# class CorrGraf(object):
-#     """[summary]
-
-#     Args:
-#         object ([type]): [description]
-#     """    
-#     def __init__(
-#             self, 
-#             networkx_graph: nx.classes.graph.Graph
-#         ) -> None:
-#         self.graph = networkx_graph
-
-#     @classmethod
-#     def fit(
-#             cls,
-#             features: Features,
-#             weights: CorrModel,
-#             threshold: float = 0
-#         ) -> nx.classes.graph.Graph:
-
-#         G = nx.Graph()
-#         G.add_nodes_from(features.nodes)
-
-#         for e, w in zip(features.tuples_lst, weights.weights):
-#             if w >= threshold: 
-#                 G.add_edge(e[0], e[1], weight = w)
-#         return(CorrGraf(G))       
-
-# ##### Classes to make it all work #######                    
-# ## For Zanin ##
-
-# class Zanin(object):
-#     """
-#     ## Zanin algorithm for parenclitic graphs
-
-#     Parameters
-#     ----------
-#     :X_fitter: pd.core.frame.DataFrame
-#         Data frame with features from healthy subjects
-#         'id' can be set as an index
-    
-
-#     :nodes_lst: list with feature names - they should be in columns
-#         Theese features will be used to construct
-#         graphs
-
-#     Examples
-#     --------
-#     first fit regression models from healthy subjects
-#     >>> healthy_data_fitted = Zanin(X_healthy, nodes)
-
-#     add new data (old or new, graphs will be created)
-#     >>> clf = DataFitter(healthy_data_fitted, some_data_to_make_graphs)
-
-#     get characteristics of graphs(strength, centralities...)
-#     >>> clf.create_chars()
-
-#     """  
-#     def __init__(
-#         self,
-#         healthy_X,
-#         nodes
-#     ) -> None:
-
-#         self.healthy = DataFrameLoader(healthy_X, nodes)
-#         print('Data for healthy loaded successfully')
-
-#         self.features = Features(self.healthy)
-#         self.features.fit()
-#         print('Features computed successfully')
-    
-#         self.models = Model(self.healthy, self.features)
-#         self.models.fit() 
-#         print('Models fitted successfully')
-#         print('Zanin is ready ...')
-
-
-# class DataFitter(object):
-#     """[summary]
-
-#     Args:
-#         object ([type]): [description]
-#     """    
-#     def __init__(
-#         self,
-#         dataloader: DataFrameLoader,
-#         newdata
-#     ) -> None:
-
-#         self.train_data = NewData(newdata, dataloader.healthy, dataloader.features, dataloader.models)
-#         self.train_data.fit()
-#         print('New data fitted successfully')
-
-#         self.graphs = GraphBasket(self.train_data, dataloader.features)
-#         self.graphs.fit()
-#         print('Graphs created...')
-
-#     def create_chars(self):
-
-#         self.graphs.compute()
-#         return self.graphs.chars
-
-# ## For Gorban ##
-
-# class Gorban(object):
-#     """
-#     ## Gorban algorithm for correlated graphs
-#     Each run makes one correlated graph
-
-#     Parameters
-#     ----------
-#     :data: pd.core.frame.DataFrame
-#         Data frame with features to make graph - time window is passed,
-#         where data frame index is usually pd.DatetimeIndex
-    
-
-#     :nodes_lst: list with feature names - they should be in columns
-#         Theese features will be used to construct graphs
-
-#     :threshold: float - threshold for edge construction. 
-#         Represents correlation coeff {0,1}. To construct an edge, 
-#         correlated weight must be strictly above threshold, otherwise
-#         edge will not be made
-
-#     Examples
-#     --------
-#     fit correlation coeffs and construct graphs
-#     >>> graph_data = DataLoader(time_window_dataframe, nodes, 0.5)
-
-#     get nx.classes.graph.Graph object:
-#     >>> G = graph_data.graph
-
-#     """
-
-
-#     def __init__(
-#             self,
-#             data: DataFrameLoader,
-#             nodes: list,
-#             threshold: float,
-#             verbose=False
-#         ) -> None:
-        
-#         self.nodes = nodes
-#         self.data = DataFrameLoader(data, self.nodes)
-#         if verbose:
-#             print('Data for healthy loaded successfully')
-
-#         self.features = Features(self.data)
-#         self.features.fit()
-#         if verbose:
-#             print('Features computed successfully')
-    
-#         self.correlations = CorrModel(self.data, self.features)
-#         self.correlations.fit() 
-
-#         corrgraph = CorrGraf.fit(self.features, 
-#             self.correlations, threshold)
-
-#         self.graph = corrgraph.graph
-#         if verbose:
-#             print('Corrs fitted successfully')
-#             print('Gorban is ready ...')
-        
+       
 ################################################################################
 ############################### Common functions ###############################
 ################################################################################
@@ -568,3 +357,36 @@ def graph_plotter(
     
     else:
         plt.show()
+
+
+def chars(G):
+    """
+    Works with fitted graph
+    """
+
+    def main_stats(x):
+        return np.array([np.max(x), np.min(x), np.mean(x), np.std(x), np.median(x)])
+
+    pca_ = PCA(.95)
+
+    degree_ = np.array([x for (_, x) in G.degree(weight='weight')])
+    clsns_ = np.asarray(list(nx.closeness_centrality(G,
+                                                        distance='weight',
+                                                        wf_improved=False).values()))
+    btwnns_ = np.asarray(list(nx.betweenness_centrality(G,
+                                                        weight='weight',
+                                                        normalized=False).values()))
+    edge_btwnns_ = np.asarray(list(nx.edge_betweenness_centrality(G,
+                                                                    weight='weight',
+                                                                    normalized=False).values()))
+    mtx_ = nx.to_numpy_matrix(G)
+    
+    return np.hstack((main_stats(degree_),
+                        main_stats(clsns_),
+                        main_stats(btwnns_),
+                        main_stats(edge_btwnns_),
+                        LA.norm(mtx_, 1),
+                        LA.norm(mtx_, 2),
+                        LA.norm(mtx_, 'fro'),
+                        LA.det(mtx_),
+                        pca_.fit(mtx_).n_components_))

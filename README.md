@@ -54,11 +54,16 @@ Various approaches for network analysis:
 - `Snltc` - common class for synolytic approach;
 - `Corr` - common class for correlation approach;
 
+**Common functions**
+
+- `graph_plotter` - plots single weighted graph;
+-  `chars` -computes various characteristics of a single graph; 
+
 ## `PhisioPatterns`
 
 - test module for time series and longitudinal data (ECG, EEG). Under heavy development;
 
 ## Test platform
 
-- `MLSelectionFlow_devel` - programm for automatic feature selection (SHAP) amd model selection (optuna module);
+- `MLSelectionFlow_devel` - programm for automatic feature selection (SHAP) and model selection (optuna module);
 
