@@ -26,7 +26,7 @@ Module is under heavy readjustment.
 
 ## `ModPerf`
 
-ModPerf is a module that typical metrics known in medical trials for machine learning algorithms.
+ModPerf is a module that assesses typical metrics known in medical trials for machine learning algorithms.
 
 **Metric functions**:
 
