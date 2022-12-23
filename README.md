@@ -42,6 +42,8 @@ ModPerf is a module that assesses typical metrics known in medical trials for ma
 
 ## `Parenclitic`
 
+Parenclitic module involve various functions for network approaches from works of [M. Zanin](https://orcid.org/0000-0002-5839-0393), [A. Gorban](https://orcid.org/0000-0001-6224-1430), [A. Zaikin](https://orcid.org/0000-0001-7540-1130), [H. Whitwell](https://orcid.org/0000-0001-8987-4158), [M. Krivonisov](https://orcid.org/0000-0002-1169-5149), [T. Nazarenko](https://orcid.org/0000-0002-4245-7346).
+
 Various approaches for network analysis:
 
 - parenclitic graphs with a threshold;
