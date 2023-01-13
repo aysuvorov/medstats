@@ -2,6 +2,8 @@
 #
 # To load script run
 # source("/home/guest/Yandex.Disk/GitHub/r-medstats/medstats.R")
+# or
+# source("/home/guest/Документы/medstats/R_scripts/medstats.R")
 #
 # env R_HOME=/usr/lib64/R radian  --NOT RUN
 # radian --r-binary=/usr/bin/R    --NOT RUN
