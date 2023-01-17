@@ -166,7 +166,7 @@ class Snltc(object):
 
         for i in self.edges_lst: 
             if clf:
-                pass
+                clf = clf
             else:
                 clf = SVC(probability = True, random_state=0)
 
