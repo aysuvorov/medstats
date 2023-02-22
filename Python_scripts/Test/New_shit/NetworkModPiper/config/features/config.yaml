@@ -1,0 +1,6 @@
+# Load features from selector 'lasso', 'xgb', or ...
+FEATURE_SELECTOR_MODEL: "lasso"
+FEATURES_LEN: 20
+USE_PCA: False
+
+

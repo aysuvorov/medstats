@@ -1,0 +1,13 @@
+data:
+  PATH_TO_RAW_DATA: ../data/01_raw_data/data.pkl
+  PATH_TO_SPLIT_DATA: ../data/02_splitted_data
+  TARGET: Y_diast
+features:
+  FEATURES: xgb
+  FEATURES_LEN: 15
+training:
+  TEST_PROP: 0.3
+  SHUFFLE: 1
+  RESAMPLER: 1
+  RESAMP_SAMP: 350
+RS: 101

@@ -1,0 +1,23 @@
+data:
+  PATH_TO_RAW_DATA: ./data/01_raw_data/data.pkl
+  PATH_TO_SPLIT_DATA: ./data/02_splitted_data
+  PATH_TO_SELECTED_FEATURES: ./data/03_selected_features
+  PATH_TO_PREPROCESSED_DATA: ./data/04_preprocessed_data
+  PATH_TO_ADJUST_MATRICES: ./data/05_adjmat_data
+  PATH_TO_CNN_MODELS: ./Models
+  TARGET: Y_diast
+features:
+  FEATURE_SELECTOR_MODEL: xgb
+  FEATURES_LEN: 20
+  USE_PCA: true
+training:
+  TEST_PROP: 0.3
+  SHUFFLE: 1
+  RESAMPLER: 1
+  RESAMP_SAMP: 350
+graphs: {}
+neural_network:
+  LEARNING_RATE: 0.0001
+  EPOCHS: 1000
+  BATCH_SIZE: 64
+RS: 101

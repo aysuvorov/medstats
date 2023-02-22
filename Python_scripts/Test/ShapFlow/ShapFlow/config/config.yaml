@@ -1,0 +1,14 @@
+PATH_TO_X: "../ShapFlow/data/X_death.pkl"
+PATH_TO_Y: "../ShapFlow/data/y_death.pkl"
+RANDOM_STATE: 42
+OPTUNA_TRIAL_NUMBER: 1
+TEST_SIZE: 0.33
+STRATIFY: 1
+CLASS_WEIGHT:
+  0: 0.1
+  1: 0.9
+N_PREDICTORS: 12
+BALANCED: 0
+PATH_TO_OUTPUT: "../ShapFlow/data/Output_"
+PATH_TO_PLOT: "../ShapFlow/data"
+SCORER: "precision"

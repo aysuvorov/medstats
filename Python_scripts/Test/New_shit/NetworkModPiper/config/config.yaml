@@ -1,0 +1,19 @@
+# Global random state
+RS: 101 
+
+# Disable change directly and create output directories
+hydra:
+  job:
+    chdir: False
+  run:
+    dir: .
+
+# Add other config files
+defaults:
+  - data: config
+  - features: config
+  - training: config
+  - graphs: config
+  - neural_network: config
+  # Config from this file override the values of configs from the Defaults List
+  - _self_
