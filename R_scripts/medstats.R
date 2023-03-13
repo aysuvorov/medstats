@@ -769,6 +769,19 @@ log_odds_uni = function(data, dep_var) {
                  lower_CI = round(lower_CI, 2),
                  upper_CI = round(upper_CI, 2))
   
+  # Бинарные факторы в таблице автоматически получают суффикс "1", т.к. 1-я категория оценивается. 
+  # Ниже убираем единицы из названий факторов
+  
+  var_names = tab$`Фактор`
+  for (i in seq(length(var_names))) {
+    s = var_names[i]
+    if (str_sub(s,-1) == "1") {
+        s = substring(s,1, nchar(s)-1)
+    }
+    var_names[i] = s
+  }
+  tab$`Фактор` = var_names
+  
   return(tab[c('Индекс','Фактор', 'OR', 'lower_CI', 'upper_CI', 'p.value')])
 }
 
