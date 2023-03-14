@@ -968,9 +968,12 @@ roc_thresholds = \(real, pred, x="best", input="threshold", full_coords = T) {
 
   }
   
-  roc.tab = ci.coords(roc(real, pred), x = x, input=input,
-  ret = rets
-    ) |> data.frame()
+  roc.tab = tryCatch(
+      {roc.tab = ci.coords(roc(real, pred), x = x, input=input,
+            ret = rets) |> data.frame()}
+      , error = function(e) {roc.tab = 
+        ci.coords(roc(real, pred), x = x, input=input, best.policy = "random",
+            ret = rets) |> data.frame()})
 
   roc.tab = roc.tab |> select(all_of(cols))
 
