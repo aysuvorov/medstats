@@ -710,6 +710,25 @@ univariate_cor_test = function(data, dep_var, method = 'spearman') {
   
 }
 
+## Плоская корреляционная матрица по всей таблице
+
+correlation_flat_matrix = function(df, method = 'spearman') {
+
+    params = t(combn(columns_printer(colnames(df)),2))
+    len = dim(params)[1]
+    cor_matrix = data.frame()
+    for (i in seq(len)) {
+
+        cor_test = cor.test(df[[params[i, c(1)]]], df[[params[i, c(2)]]], method = method)
+        rho = round(cor_test$estimate, 3)
+        p_val = round(cor_test$p.value, 3)
+        cor_matrix = rbind(cor_matrix, c(params[i, c(1)], params[i, c(2)], rho, p_val))
+    }
+
+    colnames(cor_matrix) = c("Factor_1", "Factor_2", "Spearman_rho", "p_val")
+    return(cor_matrix)
+}
+
 
 ## Univariate logistic models
 
