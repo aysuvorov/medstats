@@ -884,6 +884,20 @@ linear_covariate = \(data, y_var, covariates, scale_data = T) {
         conf.high, std.error, statistic, Adj.R.sq, p.value)
     colnames(or.df) = c('id', 'Factor', 'Coeff', 'lowerCI', 'upperCI', 'SE', 
             'Stat', 'Adj.R.sq', 'p-val')
+  
+    var_names = or.df$Factor
+    for (i in seq(length(var_names))) {
+        s = var_names[i]
+        if (str_sub(s,-1) == "1") {
+            if (str_sub(s,-2) != "_1") {
+                s = substring(s,1, nchar(s)-1) 
+            }
+        }
+        var_names[i] = s
+    }
+    or.df$Factor = var_names
+  
+  
     return(or.df)
 }
 
@@ -901,11 +915,14 @@ log_covariate = \(dataframe, y_var, covariates) {
     ID = 0
 
     for (col in col_lst) {
+    # foreach(i = 1:length(col_lst)) %do% {
         
         ID = ID + 1
 
         tryCatch({
             model = dataframe |> select(c(y, all_of(covariates), all_of(col))) |> tibble()
+            # model = dataframe |> select(c(y, all_of(covariates), all_of(col_lst[i]))) |> tibble()
+
             model = glm(y ~ ., data = model, family = binomial)
             or.df = model |> tidy(conf.int=T, exponentiate=T) |> 
                 select(term, estimate, conf.low, conf.high, p.value) |> 
@@ -916,27 +933,32 @@ log_covariate = \(dataframe, y_var, covariates) {
             error = function(e) {
                 or.df = bind_rows(tibble(
                         id = ID,
-                        term = col, 
+                        term = col,
+                        # term = col_lst[i], 
+
                         estimate = NA, 
                         conf.low = NA, 
                         conf.high = NA, 
                         p.value = 1))})
 
     }
+
     or.df = or.df |> arrange(id) |> select(id, term, estimate, conf.low, 
         conf.high, p.value)
     colnames(or.df) = c('id', 'Factor', 'OR', 'lowerCI', 'upperCI', 'p-val')
-  
+
     var_names = or.df$Factor
     for (i in seq(length(var_names))) {
         s = var_names[i]
         if (str_sub(s,-1) == "1") {
-            s = substring(s,1, nchar(s)-1)
+            if (str_sub(s,-2) != "_1") {
+                s = substring(s,1, nchar(s)-1) 
+            }
         }
         var_names[i] = s
     }
     or.df$Factor = var_names
-  
+
     return(or.df)
 }
 
