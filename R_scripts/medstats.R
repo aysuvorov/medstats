@@ -926,6 +926,17 @@ log_covariate = \(dataframe, y_var, covariates) {
     or.df = or.df |> arrange(id) |> select(id, term, estimate, conf.low, 
         conf.high, p.value)
     colnames(or.df) = c('id', 'Factor', 'OR', 'lowerCI', 'upperCI', 'p-val')
+  
+    var_names = tab$Factor
+    for (i in seq(length(var_names))) {
+        s = var_names[i]
+        if (str_sub(s,-1) == "1") {
+            s = substring(s,1, nchar(s)-1)
+        }
+        var_names[i] = s
+    }
+    tab$Factor = var_names
+  
     return(or.df)
 }
 
