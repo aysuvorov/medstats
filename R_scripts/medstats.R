@@ -927,7 +927,7 @@ log_covariate = \(dataframe, y_var, covariates) {
         conf.high, p.value)
     colnames(or.df) = c('id', 'Factor', 'OR', 'lowerCI', 'upperCI', 'p-val')
   
-    var_names = tab$Factor
+    var_names = or.df$Factor
     for (i in seq(length(var_names))) {
         s = var_names[i]
         if (str_sub(s,-1) == "1") {
@@ -935,7 +935,7 @@ log_covariate = \(dataframe, y_var, covariates) {
         }
         var_names[i] = s
     }
-    tab$Factor = var_names
+    or.df$Factor = var_names
   
     return(or.df)
 }
