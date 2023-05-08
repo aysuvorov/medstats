@@ -14,6 +14,7 @@ library(magrittr)
 library(fastDummies)
 library(DescTools)
 library(pROC)
+library(boot)
 
 # TO READ
 # Emmeans contrasts:
@@ -1053,6 +1054,63 @@ roc_thresholds = \(real, pred, x="best", input="threshold", full_coords = T) {
   colnames(roc.tab) = c("Статистика", "Значение","2.5% ДИ","97.5% ДИ")
   
   return(roc.tab |> rbind(c("AUC", auc_val, auc_ci[1], auc_ci[3])))
+}
+
+# +-----------------------------------------------------------------------------
+# Определение AUC, Sens, Spec, NPV, PPV, Kappa с бустрепом 95% ДИ (Гогниева)
+
+binary_classification_metrics <- function(real, predicted, nboot = 1000) {
+  
+  # Load the necessary libraries
+  library(pROC)
+  library(boot)
+#   library(vcd)
+  
+  # Check that the number of bootstrap samples is at least as large as the number of rows in the data frame
+  if (nboot < nrow(data.frame(real, predicted))) {
+    stop("The number of bootstrap samples must be at least as large as the number of rows in the data frame.")
+  }
+  
+  # Calculate the AUC
+  auc_mean <- auc(real, predicted)
+  
+  # Define a function to calculate the classification metrics
+  classification_func <- function(data, indices) {
+    real_subset <- data[indices, 1]
+    predicted_subset <- data[indices, 2]
+    tp <- sum(real_subset == 1 & predicted_subset == 1)
+    tn <- sum(real_subset == 0 & predicted_subset == 0)
+    fp <- sum(real_subset == 0 & predicted_subset == 1)
+    fn <- sum(real_subset == 1 & predicted_subset == 0)
+    sensitivity <- tp / (tp + fn)
+    specificity <- tn / (tn + fp)
+    ppv <- tp / (tp + fp)
+    npv <- tn / (tn + fn)
+    # kappa <- Kappa(matrix(c(tp, fp, fn, tn), nrow = 2))
+    # kappa_unw = kappa$Unweighted[1] |> as.numeric()
+    # kappa_w = kappa$Weighted[1] |> as.numeric()
+    p0 = (tp + tn) / (tp + fn + tn + fp)
+    pe = ((tp + fn) * (tp + fp) + (fp + tn) * (fn + tn)) / (tp + tn + fp + fn)^2
+    kappa = (p0 - pe) / (1- pe)
+    auc_ci = auc(real_subset, predicted_subset)
+    return(c(auc_ci, sensitivity, specificity, ppv, npv, kappa))
+  }
+  
+  # Perform a bootstrap to calculate confidence intervals
+  boot_results <- boot(data.frame(real, predicted), classification_func, R = nboot)
+  ci_results <- t(sapply(1:6, function(i) {
+    quantile(boot_results$t[, i], probs = c(.025, .975))
+  }))
+  
+  # Combine the results into a data frame
+  results_df <- data.frame(
+    Metric = c("AUC", "Sensitivity", "Specificity", "PPV", "NPV", "Kappa"),
+    Value = c(classification_func(data.frame(real, predicted), 1: length(real))),
+    Lower_CI = ci_results[, 1],
+    Upper_CI = ci_results[, 2]
+  )
+  
+  return(results_df)
 }
 
 
