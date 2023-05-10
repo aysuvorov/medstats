@@ -1059,58 +1059,81 @@ roc_thresholds = \(real, pred, x="best", input="threshold", full_coords = T) {
 # +-----------------------------------------------------------------------------
 # Определение AUC, Sens, Spec, NPV, PPV, Kappa с бустрепом 95% ДИ (Гогниева)
 
-binary_classification_metrics <- function(real, predicted, nboot = 1000) {
-  
-  # Load the necessary libraries
-  library(pROC)
-  library(boot)
-#   library(vcd)
-  
-  # Check that the number of bootstrap samples is at least as large as the number of rows in the data frame
-  if (nboot < nrow(data.frame(real, predicted))) {
-    stop("The number of bootstrap samples must be at least as large as the number of rows in the data frame.")
-  }
-  
-  # Calculate the AUC
-  auc_mean <- auc(real, predicted)
-  
-  # Define a function to calculate the classification metrics
-  classification_func <- function(data, indices) {
-    real_subset <- data[indices, 1]
-    predicted_subset <- data[indices, 2]
-    tp <- sum(real_subset == 1 & predicted_subset == 1)
-    tn <- sum(real_subset == 0 & predicted_subset == 0)
-    fp <- sum(real_subset == 0 & predicted_subset == 1)
-    fn <- sum(real_subset == 1 & predicted_subset == 0)
-    sensitivity <- tp / (tp + fn)
-    specificity <- tn / (tn + fp)
-    ppv <- tp / (tp + fp)
-    npv <- tn / (tn + fn)
-    # kappa <- Kappa(matrix(c(tp, fp, fn, tn), nrow = 2))
-    # kappa_unw = kappa$Unweighted[1] |> as.numeric()
-    # kappa_w = kappa$Weighted[1] |> as.numeric()
-    p0 = (tp + tn) / (tp + fn + tn + fp)
-    pe = ((tp + fn) * (tp + fp) + (fp + tn) * (fn + tn)) / (tp + tn + fp + fn)^2
-    kappa = (p0 - pe) / (1- pe)
-    auc_ci = auc(real_subset, predicted_subset)
-    return(c(auc_ci, sensitivity, specificity, ppv, npv, kappa))
-  }
-  
-  # Perform a bootstrap to calculate confidence intervals
-  boot_results <- boot(data.frame(real, predicted), classification_func, R = nboot)
-  ci_results <- t(sapply(1:6, function(i) {
-    quantile(boot_results$t[, i], probs = c(.025, .975))
-  }))
-  
-  # Combine the results into a data frame
-  results_df <- data.frame(
-    Metric = c("AUC", "Sensitivity", "Specificity", "PPV", "NPV", "Kappa"),
-    Value = c(classification_func(data.frame(real, predicted), 1: length(real))),
-    Lower_CI = ci_results[, 1],
-    Upper_CI = ci_results[, 2]
-  )
-  
-  return(results_df)
+binary_classification_metrics = function(real, pred, nboot = 10) {
+    df = data.frame(
+        Real = real,
+        Pred = pred
+    ) |> na.omit()
+
+    idx = seq(length(rownames(df)))
+
+    classification_func = function(frame) {
+
+        real_subset <- frame[, 1]
+        predicted_subset <- frame[, 2]
+
+        if (
+            length(unique(real_subset)) == 2 & length(unique(predicted_subset)
+            ) == 2) {
+
+                # Stats:
+                tp <- sum(real_subset == 1 & predicted_subset == 1)
+                tn <- sum(real_subset == 0 & predicted_subset == 0)
+                fp <- sum(real_subset == 0 & predicted_subset == 1)
+                fn <- sum(real_subset == 1 & predicted_subset == 0)
+                sensitivity <- tp / (tp + fn)
+                specificity <- tn / (tn + fp)
+                ppv <- tp / (tp + fp)
+                npv <- tn / (tn + fn)
+                # kappa <- Kappa(matrix(c(tp, fp, fn, tn), nrow = 2))
+                # kappa_unw = kappa$Unweighted[1] |> as.numeric()
+                # kappa_w = kappa$Weighted[1] |> as.numeric()
+                p0 = (tp + tn) / (tp + fn + tn + fp)
+                pe = ((tp + fn) * (tp + fp) + (fp + tn) * (fn + tn)) / (tp + tn + fp + fn)^2
+                kappa = (p0 - pe) / (1- pe)
+                auc_ci = auc(real_subset, predicted_subset)
+                f1 = 2 * tp / (2 * tp + fp + fn)
+                balanced_acc = (sensitivity + specificity)/2
+
+                return(c(auc_ci, sensitivity, specificity, ppv, npv, f1, balanced_acc, 
+                    kappa))        
+
+        } else {
+            # return(invisible(NULL))
+            return(rep(NA, 8))
+        }
+    }
+
+    res_matrix = matrix(ncol = 8)
+
+    i = 0
+
+    while (i < nboot) {
+
+            new_idx = sample(idx, size = length(idx), replace = T)
+            res_matrix = rbind(
+                res_matrix, 
+                classification_func(df[new_idx,])
+            )
+            res_matrix = na.omit(res_matrix)
+            i = dim(res_matrix)[1]
+
+        }
+
+    res_matrix = t(sapply(1:8, function(i) {
+        quantile(res_matrix[, i], probs = c(.025, .975))
+    })) |> data.frame()
+    colnames(res_matrix) = c('lower', 'upper')
+
+    res_matrix = res_matrix |> mutate(Point_est = classification_func(df),
+        Stats = c('AUC', 'Sens', 'Spec', 'NPV', 'PPV', 'f1', 'balanced_acc', 
+                    'kappa')) |> dplyr::select(c(Stats, Point_est, lower, upper))
+
+    if (res_matrix[1,2] < 0.5) {
+        res_matrix[1,c(2,3,4)] = 1 - res_matrix[1,c(2,3,4)]
+    }
+
+    return(res_matrix)
 }
 
 
