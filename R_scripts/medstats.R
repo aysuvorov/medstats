@@ -676,13 +676,17 @@ univariate_linear_regr = function(data, dep_var) {
   
   var_names = ddd$`Показатель`
   for (i in seq(length(var_names))) {
-    s = var_names[i]
-    if (str_sub(s,-1) == "1") {
-        s = substring(s,1, nchar(s)-1)
-    }
-    var_names[i] = s
+      s = var_names[i]
+      print(s)
+      if (is.na(s) == T) {
+          s = 'No-name' 
+      }
+      if (str_sub(s,-1) == "1") {
+          s = substring(s,1, nchar(s)-1)
+      }
+      var_names[i] = s
   }
-  ddd$`Показатель` = var_names
+  ddd = ddd |> filter(`Показатель` != 'No-name')
   
   
   rownames(ddd) = seq(length(rownames(ddd)))
