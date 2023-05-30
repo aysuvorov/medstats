@@ -686,6 +686,7 @@ univariate_linear_regr = function(data, dep_var) {
       }
       var_names[i] = s
   }
+  ddd$`Показатель` = var_names
   ddd = ddd |> filter(`Показатель` != 'No-name')
   
   
