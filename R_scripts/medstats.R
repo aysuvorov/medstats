@@ -670,12 +670,29 @@ univariate_linear_regr = function(data, dep_var) {
     
   }
   colnames(ddd) = c('Показатель','Коэфф','SE','t.stat','Adj.R.squared', 'p-val')
+  
+  # Бинарные факторы в таблице автоматически получают суффикс "1", т.к. 1-я категория оценивается. 
+  # Ниже убираем единицы из названий факторов
+  
+  var_names = ddd$`Показатель`
+  for (i in seq(length(var_names))) {
+    s = var_names[i]
+    if (str_sub(s,-1) == "1") {
+        s = substring(s,1, nchar(s)-1)
+    }
+    var_names[i] = s
+  }
+  ddd$`Показатель` = var_names
+  
+  
   rownames(ddd) = seq(length(rownames(ddd)))
   ddd %<>% mutate(`Коэфф`= round(`Коэфф`, 3),
                   SE = round(SE, 3),
                   t.stat = round(t.stat, 3),
                   `Adj.R.squared` = round(`Adj.R.squared`, 3),
                   `p-val` = round(`p-val`, 3))
+  
+  
   return(ddd)
 }
 
