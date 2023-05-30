@@ -653,16 +653,16 @@ univariate_linear_regr = function(data, dep_var) {
         select(c(term, estimate, 
                  std.error, statistic))}
       , error = function(e) {a <<- data.frame(term = col,
-                                              estimate = )})
+                                              estimate = NA)})
     
     
     tryCatch(
       {b = glance(lm(as.formula(paste(dep_var, '~.')), 
                      data[c(dep_var, col)]))[c('adj.r.squared','p.value')]}
-      , error = function(e) {b <<- data.frame(std.error   = ,
-                                              statistic  = ,
-                                              adj.r.squared = ,
-                                              p.value = )})
+      , error = function(e) {b <<- data.frame(std.error   = NA,
+                                              statistic  = NA,
+                                              adj.r.squared = NA,
+                                              p.value = NA)})
     
     a = cbind(a, b)
     
@@ -670,15 +670,13 @@ univariate_linear_regr = function(data, dep_var) {
     
   }
   colnames(ddd) = c('Показатель','Коэфф','SE','t.stat','Adj.R.squared', 'p-val')
-  ddd$`Индекс` = rownames(ddd) = seq(length(rownames(ddd)))
-
-  ddd %<>% mutate(
-                  `Коэфф`= round(`Коэфф`, 3),
+  rownames(ddd) = seq(length(rownames(ddd)))
+  ddd %<>% mutate(`Коэфф`= round(`Коэфф`, 3),
                   SE = round(SE, 3),
                   t.stat = round(t.stat, 3),
                   `Adj.R.squared` = round(`Adj.R.squared`, 3),
                   `p-val` = round(`p-val`, 3))
-  return(ddd[c('Индекс', 'Показатель','Коэфф','SE','t.stat','Adj.R.squared', 'p-val')])
+  return(ddd)
 }
 
 # Correlation models
