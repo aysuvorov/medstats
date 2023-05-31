@@ -651,7 +651,7 @@ univariate_linear_regr = function(data, dep_var) {
     tryCatch(
       {a = tidy(summary(lm(as.formula(paste(dep_var, '~.')), data[c(dep_var, col)])))[2,] %>%
         select(c(term, estimate, 
-                 std.error, statistic))}
+                 std.error, statistic)) |> mutate(term = col)}
       , error = function(e) {a <<- data.frame(term = col,
                                               estimate = NA)})
     
@@ -677,7 +677,6 @@ univariate_linear_regr = function(data, dep_var) {
   var_names = ddd$`Показатель`
   for (i in seq(length(var_names))) {
       s = var_names[i]
-      print(s)
       if (is.na(s) == T) {
           s = 'No-name' 
       }
