@@ -690,14 +690,15 @@ univariate_linear_regr = function(data, dep_var) {
   
   
   rownames(ddd) = seq(length(rownames(ddd)))
-  ddd %<>% mutate(`Коэфф`= round(`Коэфф`, 3),
+  ddd %<>% mutate(`Индекс` = as.numeric(rownames(ddd)),
+                `Коэфф`= round(`Коэфф`, 3),
                   SE = round(SE, 3),
                   t.stat = round(t.stat, 3),
                   `Adj.R.squared` = round(`Adj.R.squared`, 3),
                   `p-val` = round(`p-val`, 3))
   
   
-  return(ddd)
+  return(ddd |> select(c("Индекс","Показатель", "Коэфф", "SE", "t.stat", "Adj.R.squared", "p-val")))
 }
 
 # Correlation models
@@ -803,7 +804,7 @@ log_odds_uni = function(data, dep_var) {
   
   rownames(tab) = seq(dim(tab)[1])
   colnames(tab) = c('Фактор', 'OR', 'lower_CI', 'upper_CI', 'p.value')
-  tab$`Индекс` = rownames(tab)
+  tab$`Индекс` = as.numeric(rownames(tab))
   tab %>% mutate(OR = round(OR, 2),
                  lower_CI = round(lower_CI, 2),
                  upper_CI = round(upper_CI, 2))
