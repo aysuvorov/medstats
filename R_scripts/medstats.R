@@ -514,8 +514,9 @@ compare_all = function(
                                          "{median} [{p25}; {p75}]")) %>% 
       add_p(
         pvalue_fun = ~style_pvalue(.x, digits = 3),
-        list(columns_printer(normal) ~ "aov",
-             columns_printer(unnormal) ~ "kruskal.test")) %>% as_tibble() 
+        list(normal ~ "aov"
+             # columns_printer(unnormal) ~ "kruskal.test"
+            )) %>% as_tibble() 
   }
   
   # Changing names, order, creating index variable, distribution variable
