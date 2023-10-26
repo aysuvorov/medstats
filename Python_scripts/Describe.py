@@ -15,10 +15,13 @@ from scipy.stats.stats import ttest_ind
 from statsmodels.stats.proportion import proportion_confint
 from scipy.stats import shapiro, kstest, ttest_ind, ttest_rel, mannwhitneyu, fisher_exact, chi2_contingency, kruskal, wilcoxon, f_oneway
 from pandas.api.types import CategoricalDtype
+from lifelines import KaplanMeierFitter, CoxPHFitter
 #from statsmodels.tools.sm_exceptions import PerfectSeparationError
 #from statsmodels.formula.api import ols, logit, mixedlm, gee, poisson
 #from numpy.linalg import LinAlgError
 #from lifelines import KaplanMeierFitter
+
+cph = CoxPHFitter()
 
 ## Rpy2 env
 import rpy2.robjects as ro
@@ -34,6 +37,7 @@ rpyn.activate()
 
 stats = importr('stats')
 base = importr('base')
+
 
 # import sys
 # sys.path.append('/home/guest/Yandex.Disk/GitHub/medstats/src/cxs')
@@ -741,6 +745,116 @@ def binary_95CI(df, cat_vars):
         data = data.append({'Фактор': name, 'Point': round(point*100, 1),'2.5% CI': round(low*100, 1), '97.5% CI': round(high*100, 1)}, ignore_index=True) #
         
     return(data.reindex(columns=['Фактор', 'Point', '2.5% CI', '97.5% CI']))
+
+# +----------------------------------------------------------------------------------
+# +----------------------------------------------------------------------------------
+
+"""
+Regressions
+"""
+
+def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
+    """AI is creating summary for onedim_coxregr
+
+    Args:
+        df: original dataframe 
+        group: death or target column
+        time: time column
+        adj (bool, optional): do we need to adjust for covariates? Defaults to False.
+        adj_cols_lst (List): if adj == True, provide list of covariates for adjustments. Defaults to None.
+    """    
+    columns = [x for x in df.columns if (x != group) and (x != time) ]
+
+    coxregr = pd.DataFrame()
+
+    if adj:
+        for col in columns:
+            try:
+                model = cph.fit(df[[col, group, time] + adj_cols_lst].dropna(), duration_col=time, event_col=group)
+                HR = round(model.hazard_ratios_[0], 2)
+                p = round(model.summary['p'][0], 3)
+                conf0 = round(model.summary['exp(coef) lower 95%'][0], 2)
+                conf1 = round(model.summary['exp(coef) upper 95%'][0], 2)
+
+            except:
+                HR = 'NA'
+                p = 1
+                conf0 = 'NA'
+                conf1 = 'NA'
+
+            coxregr = pd.concat(
+                [coxregr,
+                pd.DataFrame({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, index = [1])], 
+                    ignore_index=True)
+
+        coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+    else:
+        for col in columns:
+            try:
+                model = cph.fit(df[[col, group, time]].dropna(), duration_col=time, event_col=group)
+                HR = round(model.hazard_ratios_[0], 2)
+                p = round(model.summary['p'][0], 3)
+                conf0 = round(model.summary['exp(coef) lower 95%'][0], 2)
+                conf1 = round(model.summary['exp(coef) upper 95%'][0], 2)
+
+            except:
+                HR = 'NA'
+                p = 1
+                conf0 = 'NA'
+                conf1 = 'NA'
+
+            coxregr = pd.concat(
+                [coxregr,
+                pd.DataFrame({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, index = [1])], 
+                    ignore_index=True)
+
+        coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+
+    return(coxregr)
+
+
+def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
+    """AI is creating summary for step_cox
+
+    Args:
+        df: original dataframe 
+        group: death or target column
+        time: time column
+        vars: vars to select from for multivariate model
+        iterations: number of steps. Defaults to 1000.
+        penalty: penalizer argument from CoxPHFitter class. Defaults to .001.
+
+    Returns:
+        model_tab: multivariate COX model
+    """    
+    var_lst = vars.copy()
+
+    pen = .001
+
+    cph_selector = CoxPHFitter(penalizer = penalty)
+
+    index_p_max = []
+
+    for number in range(iterations):
+
+        if index_p_max in var_lst:
+            var_lst.remove(index_p_max)
+        
+        model = cph_selector.fit(df[[group, time] + var_lst].dropna(), duration_col=time, event_col=group)
+        p_max = model.summary['p'].max()
+
+        if p_max < 0.05:
+            break
+        else:
+            index_p_max = model.summary['p'].idxmax()
+
+    model2 = cph.fit(df[[group, time] + var_lst].dropna(), duration_col=time, event_col=group)
+
+    model_tab = model2.summary[['exp(coef)', 'exp(coef) lower 95%', 'exp(coef) upper 95%', 'p']].reset_index()
+    model_tab.columns = ['Factor', 'HR', 'lower CI',	'upper CI',	'p-val']
+    model_tab[['HR', 'lower CI',	'upper CI']] = model_tab[['HR', 'lower CI',	'upper CI']].round(2)
+    model_tab[['p-val']] = model_tab[['p-val']].round(3)
+    return model_tab    
 
 # +----------------------------------------------------------------------------------
 # +----------------------------------------------------------------------------------
