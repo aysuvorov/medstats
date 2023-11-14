@@ -1,5 +1,7 @@
 # Main functions file
 #
+# 14-Nov-2023
+#
 # To load script run
 # source("/home/guest/Yandex.Disk/GitHub/r-medstats/medstats.R")
 # or
@@ -212,6 +214,30 @@ data_filler = function(data, fact_lst=NULL, numeric_lst=NULL) {
   }
   
   return(data)
+}
+
+# Find unique factors with levels <= 7
+# Return names of the factors
+FactorFinder = \(data_frame, min_factor_levels = 7) {
+
+    index = data_frame |> summarise_all(
+        ~ (length(unique(., na.rm = T)))) <= min_factor_levels 
+    return(colnames(data_frame)[index])
+}
+
+# +-----------------------------------------------------------------------------
+
+# Find unique factors with levels <= 7 and transform them to factors by default
+# Return transformed data_frame (not imputed!)
+FactorTransformer = \(data_frame, min_factor_levels = 7) {
+    return(
+        data_frame |> 
+        mutate(
+            across(
+                FactorFinder(data_frame, min_factor_levels), factor
+                )
+                )
+                )
 }
 
 # +-----------------------------------------------------------------------------
