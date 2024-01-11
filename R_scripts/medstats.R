@@ -257,7 +257,7 @@ ContNoiser = \(x, method = 'unif', z_scores = 1, seed = 0) {
             length(x),
             0,
             # DescTools::MeanSE(x)
-            max = z_scores * sd(x, na.rm = TRUE)
+            z_scores * sd(x, na.rm = TRUE)
             )
     } else {
         print('error')

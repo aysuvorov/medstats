@@ -7,7 +7,28 @@ Bootstrapping
 simr
 
 
-
+ContNoiser = \(x, method = 'unif', z_scores = 1, seed = 0) {
+    if (method == 'unif') {
+        set.seed = seed
+        noise = runif(
+            length(x),
+            min = 0,
+            # max = DescTools::MeanSE(x)
+            max = z_scores * sd(x, na.rm = TRUE)
+            )
+    } else if (method == 'norm') {
+        set.seed = seed
+        noise = rnorm(
+            length(x),
+            0,
+            # DescTools::MeanSE(x)
+            max = z_scores * sd(x, na.rm = TRUE)
+            )
+    } else {
+        print('error')
+    }
+    return(x + noise)
+}
 
 # +-----------------------------------------------------------------------------
 # faux: Simulation for Factorial Designs
@@ -31,7 +52,7 @@ set.seed(0)
 for (i in rownames(mtcars) |> sample(1000, replace = TRUE)) {
     rsmpld_df = rbind(rsmpld_df, mtcars[i, ])
 }
-rsmpld_df = rsmpld_df |> mutate_if(is.numeric, ContNoiser, method = 'norm')
+rsmpld_df = rsmpld_df |> mutate_if(is.numeric, ContNoiser(., method = 'norm'))
 
 lm(mpg ~ hp, mtcars) |> summary()
 lm(mpg ~ hp, faux_df) |> summary()
@@ -41,3 +62,5 @@ plot(mpg ~ hp, rsmpld_df)
 
 mtcars |> mutate_all(as.numeric) |> summarise_all(sd)
 rsmpld_df |> mutate_all(as.numeric) |> summarise_all(sd)
+
+ContNoiser(seq(18), z_scores = 100)
