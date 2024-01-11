@@ -1,3 +1,8 @@
+# Experiments with missings
+# --------------------------------------
+
+# 11.01.2024
+
 
 # if (!require("BiocManager", quietly = TRUE))
 #       install.packages("BiocManager")

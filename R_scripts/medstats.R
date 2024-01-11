@@ -240,6 +240,29 @@ FactorTransformer = \(data_frame, min_factor_levels = 7) {
                 )
 }
 
+# Add uniform noise to continuous var with min = 0, max = SE OR 
+# add normal noise to continuous var with mean = 0 and sd = SE
+ContNoiser = \(x, method = 'unif', seed = 0) {
+    if (method == 'unif') {
+        set.seed = seed
+        noise = runif(
+            length(x),
+            min = 0,
+            max = DescTools::MeanSE(x)
+            )
+    } else if (method == 'norm') {
+        set.seed = seed
+        noise = rnorm(
+            length(x),
+            0,
+            DescTools::MeanSE(x)
+            )
+    } else {
+        print('error')
+    }
+    return(x + noise)
+}
+
 # +-----------------------------------------------------------------------------
 
 # Shapiro test
