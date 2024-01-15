@@ -63,7 +63,7 @@ for (i in rownames(cancer) |> sample(100, replace = TRUE)) {
 
 rsmpld_df = data.frame()
 set.seed(0)
-for (i in rownames(lung) |> sample(300, replace = TRUE)) {
+for (i in rownames(lung) |> sample(500, replace = TRUE)) {
     rsmpld_df = rbind(rsmpld_df, lung[i, ])
 }
 rsmpld_df = rsmpld_df |> mutate_at(vars(inst, age, time, ph.karno, pat.karno, meal.cal, wt.loss), ContNoiser, 
