@@ -92,60 +92,82 @@ rsmpld_df |>
 
 
 # +-----------------------------------------------------------------------------
+# Bootstrap by hand
+
+library(boot)
+library(DescTools)
+library(tidyverse)
+library(broom)
+
+set.seed(0)
+vec1 = rnorm(20)
+vec2 = vec1*3. + rnorm(length(vec1))
+
+tidy(lm(vec1 ~ vec2),  conf.int = TRUE)
+
+t.test(vec1, vec2)
+
+MeanDiffCI(vec1, vec2)
+
+func = mean
+ind1 = seq(length(vec1))
+ind2 = seq(length(vec2))
+MD = c()
+
+set.seed(0)
+for (i in seq(1000)) {
+
+  iddx = sample(ind1, length(vec1), replace = TRUE)
+  iddx2 = sample(ind2, length(vec2), replace = TRUE)
+  MD = c(MD, 
+    func(vec1[iddx]) - 
+    func(vec2[iddx2])
+  )
+}
+quantile(MD, probs = c(0.025, 0.975))
+
+hist(MD)
+
+ind = seq(length(vec1))
+MD = c()
+for (i in seq(1000)) {
+  iddx = sample(ind, length(vec1), replace = TRUE)
+  MD = c(MD, 
+    coef(summary(lm(vec1[iddx] ~ vec2[iddx])))[2,1]
+  )
+}
+quantile(MD, probs = c(0.005, 0.995))
+
+hist(MD)
+
+median(MD)
+
+hist(vec1)
+hist(vec2)
+
+# +-----------------------------------------------------------------------------
 # Boot library
 
 library(boot)
 library(DescTools)
 
 set.seed(0)
-vec1 = seq(80)
-vec2 = vec1 + rnorm(length(vec1))
+vec1 = rnorm(20)
+vec2 = rnorm(20)
 
-MeanDiffCI(vec1, vec2)
+dft = data.frame(cbind(append(vec1, vec2), c(rep(1,80), rep(2, 80))))
 
-df = data.frame(cbind(vec1, vec2))
-
-mean.diff <- function(dataframe, indexVector) {
-  return(mean(dataframe[indexVector,1] - dataframe[indexVector,2]))
+meanDiff = function(dataFrame, indexVector) { 
+    m1 = mean(subset(dataFrame[indexVector, 1], 
+      dataFrame[indexVector, 2] == 1))
+    m2 = mean(subset(dataFrame[indexVector, 1], 
+      dataFrame[indexVector, 2] == 2))
+    m = m1 - m2
+    return(m)
 }
 
-mean(df[,1]) - mean(df[,2])
+totalBoot = boot(dft, meanDiff, R = 10000, strata = df[,2])
+(totalBootCI = boot.ci(totalBoot, type = "basic"))
 
-t.test(vec1, vec2)
 
-(bts = boot(df, mean.diff, R = 1000) |> 
-  boot.ci(conf = 0.95))
 
-bts |> hist()
-str(bts)
-
-library(simpleboot)
-
-b <- two.boot(vec1, vec2, mean, R = 1000)
-boot.ci(b)  ## No studentized confidence intervals
-hist(b)
-
-M = cbind(vec1, vec2)
-
-mean.diff <- function(mtx, indexVector) {
-  return(mean(mtx[indexVector,1] - mtx[indexVector,2]))
-}
-
-mean.diff(M)
-
-(bts = boot(M, mean.diff, R = 1000) |> 
-  boot.ci(conf = 0.95))
-
-0.0398973 + 2*0.1011916
-
-ind = c(rep(1, length(vec1)), rep(2, length(vec2)))
-as.numeric(table(ind))
-
-mean.diff <- function(D, d) {
-  E=D[d,]
-  return(mean(E$vec1[d]) - mean(E$vec2))
-}
-
-boot(vec1, mean, R = 1000) |> boot.ci(type="basic")
-
-two.boot(vec1, vec2, mean, R = 1000)
