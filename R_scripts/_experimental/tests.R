@@ -54,3 +54,27 @@ runif(10, 0, sd(hem) * 1)|> hist()
 hem |> hist()
 
 mean(hem + runif(20, 0, sd(hem) * 1))
+
+# ------
+
+library(altair)
+library("vegawidget")
+
+data(mtcars)
+
+library("altair")
+library("vega_datasets")
+
+vega_data <- import_vega_data()
+
+chart <- 
+  alt$Chart(vega_data$cars())$
+  mark_point()$
+  encode(
+    x = "Horsepower:Q",
+    y = "Miles_per_Gallon:Q",
+    color = "Origin:N",
+    tooltip = c("Name", "Horsepower", "Miles_per_Gallon", "Origin")
+  )
+
+vegawidget(chart)
