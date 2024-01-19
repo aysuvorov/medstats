@@ -78,6 +78,35 @@ lex_coder = function(vec, olds, news) {
 }
 
 # +-----------------------------------------------------------------------------
+
+# This `lex_coder` is used to change R latin variable names into Cyrillic beautiful names
+# with special symbols, i.e. `%`, `/`, etc for functions `summary_all`,`compare_all`... 
+
+lex_coder_stat_tables =\(stat_table, column_to_change_values, old_patterns, new_patterns) {
+
+  # Example
+  # -------
+
+  # stat_table_descriptives = df |> select(c(glucose, creat,	hb)) |> summary_all()
+  
+  # old_cols_indexes = which(names(df) %in% c('glucose', 'creat',	'hb'))
+
+  # new_patterns = c('xxxx1', 'xxxx2', 'xxxx3')
+
+  # lex_coder_stat_tables(
+  #     stat_table_descriptives,
+  #     'Показатель',
+  #     names(df)[old_cols_indexes],
+  #     new_patterns) |> write_xlsx('111.xlsx')
+    
+    for (i in seq(length(old_patterns))) {
+        stat_table[column_to_change_values][stat_table[column_to_change_values] ==
+             old_patterns[i]] = new_patterns[i]
+    }
+    return(stat_table)
+}
+
+# +-----------------------------------------------------------------------------
 # Dummification
 
 dummification = function(data, var_lst) {
