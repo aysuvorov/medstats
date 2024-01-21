@@ -113,8 +113,6 @@ lex_coder_stat_tables =\(stat_table, column_to_change_values, stat_vector, old_p
   #     new_patterns =new_patterns,
   #     from_table = FALSE)
 
-    print(is.na(old_patterns))
-    print(old_patterns)
 
   if (from_table == TRUE) {
 
