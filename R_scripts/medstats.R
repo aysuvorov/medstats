@@ -82,28 +82,71 @@ lex_coder = function(vec, olds, news) {
 # This `lex_coder` is used to change R latin variable names into Cyrillic beautiful names
 # with special symbols, i.e. `%`, `/`, etc for functions `summary_all`,`compare_all`... 
 
-lex_coder_stat_tables =\(stat_table, column_to_change_values, old_patterns, new_patterns) {
+
+lex_coder_stat_tables =\(stat_table, column_to_change_values, stat_vector, old_patterns, new_patterns, from_table = TRUE) {
 
   # Example
   # -------
 
-  # stat_table_descriptives = df |> select(c(glucose, creat,	hb)) |> summary_all()
+  # FROM DATA FRAME
+  # stat_table_descriptives = df |> select(c(glucose, creat, hb)) |> summary_all()
   
-  # old_cols_indexes = which(names(df) %in% c('glucose', 'creat',	'hb'))
-
+  # old_patterns = which(names(df) %in% c('glucose', 'creat',	'hb'))
   # new_patterns = c('xxxx1', 'xxxx2', 'xxxx3')
 
   # lex_coder_stat_tables(
-  #     stat_table_descriptives,
-  #     'Показатель',
-  #     names(df)[old_cols_indexes],
-  #     new_patterns) |> write_xlsx('111.xlsx')
-    
-    for (i in seq(length(old_patterns))) {
-        stat_table[column_to_change_values][stat_table[column_to_change_values] ==
-             old_patterns[i]] = new_patterns[i]
+  #     stat_table = stat_table_descriptives,
+  #     column_to_change_values'Показатель',
+  #     old_patterns = old_patterns,
+  #     new_patterns =new_patterns,
+  #     from_table = TRUE) |> write_xlsx('111.xlsx')
+
+  # FROM VECTOR
+  # stat_vector = stat_table[column_to_change_values] |> pull()
+  
+  # old_patterns = which(names(df) %in% c('glucose', 'creat',	'hb'))
+  # new_patterns = c('xxxx1', 'xxxx2', 'xxxx3')
+
+  # lex_coder_stat_tables(
+  #     stat_vector = stat_vector
+  #     old_patterns = old_patterns,
+  #     new_patterns =new_patterns,
+  #     from_table = FALSE)
+
+    print(is.na(old_patterns))
+    print(old_patterns)
+
+  if (from_table == TRUE) {
+
+    pulled_vec = stat_table[column_to_change_values] |> pull()
+
+
+    for (i in seq(length(pulled_vec))) {
+        for (j in seq(length(old_patterns))) {
+            if (pulled_vec[i] == old_patterns[j]) {
+                
+                pulled_vec[i] = new_patterns[j]
+            }
+        }
     }
+
+    stat_table[column_to_change_values] = pulled_vec
     return(stat_table)
+
+  } else {
+
+
+    for (i in seq(length(stat_vector))) {
+        for (j in seq(length(old_patterns))) {
+            if (stat_vector[i] == old_patterns[j]) {
+                stat_vector[i] = new_patterns[j]
+            }
+        }
+    }
+
+   return(stat_vector)
+  }
+
 }
 
 # +-----------------------------------------------------------------------------
