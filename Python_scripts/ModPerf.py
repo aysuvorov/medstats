@@ -356,3 +356,43 @@ def ModPerf_thresholds(real, pred):
         'npv', 'ppv']
     g = g.drop('auc',1)
     return g
+
+# +-----------------------------------------------------------------------------
+# The function compares 2 ROC-curves with real values and McNemar test
+# (Original in https://www.kaggle.com/code/ritvik1909/mcnemar-test-to-compare-classifiers/notebook)
+
+def McNemar2AUCs(real, model_1_preds, model_2_preds):
+    
+    contingency_table = [[0, 0], [0, 0]]
+    Y_ = pd.DataFrame(
+        dict(
+            ground_truth = real,
+            model_1 = model_1_preds,
+            model_2 = model_2_preds
+        )
+    )
+    model_1_correct = Y_.apply(lambda row: int(row[ground_truth] == row[model_1]), axis=1)
+    model_2_correct = Y_.apply(lambda row: int(row[ground_truth] == row[model_2]), axis=1)
+    contingency_table[0][0] = Y_.apply(
+        lambda row: int(row[model_1] == 0 and row[model_2] == 0), axis=1
+    ).sum()
+    contingency_table[0][1] = Y_.apply(
+        lambda row: int(row[model_1] == 0 and row[model_2] == 1), axis=1
+    ).sum()
+    contingency_table[1][0] = Y_.apply( 
+        lambda row: int(row[model_1] == 1 and row[model_2] == 0), axis=1
+    ).sum()
+    contingency_table[1][1] = Y_.apply(
+        lambda row: int(row[model_1] == 1 and row[model_2] == 1), axis=1
+    ).sum()
+    
+    test = mcnemar(contigency_table, exact=False, correction=True)
+    print("P value:", test.pvalue)
+    if test.pvalue < significance:
+        print("Reject Null Hypotheis")
+        print("Conclusion: Model have statistically different error rate")
+    else:
+        print("Accept Null Hypotheis")
+        print("Conclusion: Model do not have statistically different error rate")
+
+
