@@ -354,7 +354,10 @@ def ModPerf_thresholds(real, pred):
     g.rename(columns={'index':'Thres'}, inplace=True)
     g.columns = ['Thres','tn', 'fp', 'fn', 'tp', 'auc', 'sens', 'spec', \
         'npv', 'ppv']
-    g = g.drop('auc',1)
+    g['Youden'] = g['sens'] + g['spec'] - 1
+    g = g.drop('auc',axis = "columns")
+    g = g[['Thres','tn', 'fp', 'fn', 'tp', 'sens', 'spec', \
+        'npv', 'ppv', 'Youden']].sort_values('Youden', ascending=False)
     return g
 
 # +-----------------------------------------------------------------------------
