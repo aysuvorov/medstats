@@ -1201,7 +1201,7 @@ roc_thresholds = \(real, pred, x="best", input="threshold", full_coords = T) {
 # +-----------------------------------------------------------------------------
 # Определение AUC, Sens, Spec, NPV, PPV, Kappa с бустрепом 95% ДИ (Гогниева)
 
-binary_classification_metrics = function(real, pred, nboot = 10) {
+binary_quality = function(real, pred, nboot = 10) {
     df = data.frame(
         Real = real,
         Pred = pred
@@ -1268,7 +1268,7 @@ binary_classification_metrics = function(real, pred, nboot = 10) {
     colnames(res_matrix) = c('lower', 'upper')
 
     res_matrix = res_matrix |> mutate(Point_est = classification_func(df),
-        Stats = c('AUC', 'Sens', 'Spec', 'NPV', 'PPV', 'f1', 'balanced_acc', 
+        Stats = c('AUC', 'Sens', 'Spec', 'PPV', 'NPV', 'f1', 'balanced_acc', 
                     'kappa')) |> dplyr::select(c(Stats, Point_est, lower, upper))
 
     if (res_matrix[1,2] < 0.5) {
@@ -1278,6 +1278,84 @@ binary_classification_metrics = function(real, pred, nboot = 10) {
     return(res_matrix)
 }
 
+# Расчет взвешенной каппы Коэна
+
+weighted_kappa_multiclass = function(real, pred) {
+
+    stat = Kappa(table(real, pred))
+    p_e = stat$Weighted[1]
+    lower = stat$Weighted[1] - stat$Weighted[2] * 1.96
+    upper = stat$Weighted[1] + stat$Weighted[2] * 1.96
+    return(c(p_e, lower, upper))
+}
+
+# Определение AUC, Sens, Spec, NPV, PPV, Kappa с расчетом 95% ДИ через binom.test()
+
+binary_quality_binom = function(real_subset, predicted_subset) {
+
+    # Stats:
+    tp <- sum(real_subset == 1 & predicted_subset == 1)
+    tn <- sum(real_subset == 0 & predicted_subset == 0)
+    fp <- sum(real_subset == 0 & predicted_subset == 1)
+    fn <- sum(real_subset == 1 & predicted_subset == 0)
+
+    res = data.frame()
+
+    estimation = c('AUC', 'Sens', 'Spec', 'PPV', 'NPV', 'kappa', 'f1', 'Balanced_acc')
+
+    nom = c(1, tp, tn, tp, tn, (tp + tn), 1, 2 * tp, 1)
+    denom = c(1, (tp + fn), (tn + fp), (tp + fp), (tn + fn), 1, (2 * tp + fp + fn), 2)
+
+    for (i in seq(length(estimation))) {
+
+        
+        if (estimation[i] == 'kappa') {
+            if ((length(unique(real_subset)) == 1) | (length(unique(predicted_subset)) == 1)) {
+                point = NA
+                lower = NA
+                upper = NA
+
+            } else {
+            stat = Kappa(table(real_subset, predicted_subset))
+            point = stat$Weighted[1]
+            lower = stat$Weighted[1] - stat$Weighted[2] * 1.96
+            upper = stat$Weighted[1] + stat$Weighted[2] * 1.96
+            }
+
+        } else if (estimation[i] == 'AUC') {
+            AUC = c(auc(real_subset, predicted_subset), ci.auc(real_subset, predicted_subset)[c(1, 3)])
+            point = AUC[1]
+            lower = AUC[2]
+            upper = AUC[3]
+
+        } else if (estimation[i] == 'Balanced_acc') {
+            nnom = (tp / (tp + fn) + tn / (tn + fp))
+            ddenom = 2
+            point = nnom/ddenom
+            bts = binom.test(round(point*(tp + fn + tn + fp)), (tp + fn) + (tn + fp))
+            lower = bts$conf.int[1]
+            upper = bts$conf.int[2]
+
+        } else {
+            if (denom[i] == 0) {
+                point = NA
+                lower = NA
+                upper = NA
+            } else {
+                bts = binom.test(nom[i], denom[i])
+                point = bts$estimate
+                lower = bts$conf.int[1]
+                upper = bts$conf.int[2]
+            }
+        }
+
+        res = rbind(res, c(estimation[i], point, lower, upper))
+    }
+    names(res) = c('Statistic', 'Point_est', '95% lower', '95% upper')
+    res = res |> mutate_at(vars('Point_est', '95% lower', '95% upper'), list(~ round(as.numeric(.),3)))
+
+    return(res)
+}
 
 # +-----------------------------------------------------------------------------
 # +-----------------------------------------------------------------------------
