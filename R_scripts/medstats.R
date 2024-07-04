@@ -1304,7 +1304,7 @@ binary_quality_binom = function(real_subset, predicted_subset) {
     estimation = c('AUC', 'Sens', 'Spec', 'PPV', 'NPV', 'kappa', 'f1', 'Balanced_acc')
 
     nom = c(1, tp, tn, tp, tn, (tp + tn), 1, (2 * tp), 1)
-    denom = c(1, (tp + fn), (tn + fp), (tp + fp), (tn + fn), 1, (2 * tp + fp + fn), 2)
+    denom = c(1, (tp + fn), (tn + fp), (tp + fp), (tn + fn), (2 * tp + fp + fn), 2)
 
     for (i in seq(length(estimation))) {
 
