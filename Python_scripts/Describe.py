@@ -76,6 +76,65 @@ def columnn_normalizer(df, col_lst):
             pass
     
     return(df)
+
+
+def glimpse(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Analyzes a DataFrame and creates a summary report for each column.
+
+    Arguments:
+        df (pandas.DataFrame): The input DataFrame to analyze.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing analysis results with the following columns:
+            - Column: Name of the column.
+            - Type: Data type of the column.
+            - Valid: Number of non-missing values.
+            - Missings: Number and percentage of missing values.
+            - Missing category: Category of missingness level (Full, Low, Moderate, High).
+            - Uniques: Number of unique values in the column.
+    """
+    # Create an empty DataFrame to store the results
+    result_df = pd.DataFrame(columns=['Column', 'Type', 'Valid', 'Missings', 'Missing category', 'Uniques'])
+    
+    for col in df.columns:
+        series = df[col]
+        
+        # Determine the data type
+        dtype = str(series.dtype)
+        
+        # Count the number of missing values
+        na_count = series.isna().sum()
+        valid_count = len(series) - na_count
+        total_rows = len(series)
+        na_percentage = round(na_count / total_rows * 100, 2)
+        
+        # Count the number of unique values
+        unique_values = series.nunique()
+        
+        # Determine the missingness category
+        missing_category = ''
+        if na_percentage == 0:
+            missing_category = 'Full'
+        elif na_percentage <= 10:
+            missing_category = 'Low'
+        elif na_percentage <= 15:
+            missing_category = 'Moderate'
+        else:
+            missing_category = 'High'
+        
+        # Add a row to the resulting DataFrame
+        new_row = pd.Series({
+            'Column': col,
+            'Type': dtype,
+            'Valid': valid_count,
+            'Missings': f"{na_count} ({na_percentage}%)",  # Format the string with percentages
+            'Missing category': missing_category,
+            'Uniques': unique_values
+        })
+        result_df = pd.concat([result_df, new_row.to_frame().T], ignore_index=True)
+    
+    return result_df
  
 
 def factorizer(df, col_lst, num_lst):
@@ -107,7 +166,7 @@ def p_adjust(vector, n, method = 'BH'):
     vector = FloatVector(np.asarray(vector))
     new_vec = []
     for i in vector:
-        new_vec = new_vec + [float(stats.p_adjust(i, n=n, metho=method))]
+        new_vec = new_vec + [float(stats.p_adjust(i, n=n, method=method))]
 
     return new_vec
 
@@ -680,33 +739,51 @@ def compare_table_3g(
 
 ## Numerics
 
-def numerics_95CI(df, num_vars, statistic = 'automatic'):
+def numerics_95CI(df, num_vars, statistic='automatic'):
+    """Calculates the 95% confidence interval for numerical variables in a DataFrame.
+
+    Args:
+        df (pandas.DataFrame): The input DataFrame containing numerical variables.
+        num_vars (list): List of names of numerical variables for which to calculate confidence intervals.
+        statistic (str, optional): Method for calculating statistics. Can be either 'automatic' or 'mean'.
+            Defaults to 'automatic'. If 'automatic', normal distribution uses mean, otherwise median.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with the results including factor, calculation method, statistic,
+            point estimate, lower bound of the confidence interval (2.5%), and upper bound of the confidence interval (97.5%).
+
+    Notes:
+        - If the parameter statistic is set to 'automatic', the Shapiro-Wilk test is performed to determine normality.
+          If the distribution is normal, the mean is used; otherwise, the median is used.
+        - If the parameter statistic is set to 'mean', the mean is always used.
+        - If the parameter statistic is neither 'automatic' nor 'mean', an error message is displayed.
+    """
     data = pd.DataFrame()
     for col in df[num_vars].columns:
         name = df[col].name
         A = np.asarray(df[col].dropna())
-        
+
         if statistic == 'automatic':
             test = shapiro(A)[1]
             if test < 0.05:
                 B = np.zeros(1000)
-            
-                for i in range(0,1000):
+
+                for i in range(0, 1000):
                     B[i] = np.median(np.random.choice(A, len(A)))
-            
+
                 way = 'BS'
                 stat = 'Median'
                 point = np.median(A)
                 low = np.percentile(B, 2.5)
                 high = np.percentile(B, 97.5)
-        
+
             else:
                 way = 'Conf.Int'
                 stat = 'Mean'
                 point = np.mean(A)
                 low = sms.DescrStatsW(A).tconfint_mean()[0]
                 high = sms.DescrStatsW(A).tconfint_mean()[1]
-        
+
         elif statistic == 'mean':
             way = 'Conf.Int'
             stat = 'Mean'
@@ -715,36 +792,51 @@ def numerics_95CI(df, num_vars, statistic = 'automatic'):
             high = sms.DescrStatsW(A).tconfint_mean()[1]
 
         else:
-            print('Statistic is `automatic` or `mean`')
-
+            print("Statistic must be 'automatic' or 'mean'")
 
         data = data.append(
             {
-                'Фактор': name, 
-                'Способ': way, 
-                'Статистика': stat,
-                'Point est':point, 
-                '2.5% CI': round(low,2), 
+                'Factor': name,
+                'Method': way,
+                'Statistic': stat,
+                'Point Estimate': point,
+                '2.5% CI': round(low, 2),
                 '97.5% CI': round(high, 2)
-            }, ignore_index=True) 
-        
-    return(data.reindex(columns=['Фактор', 'Способ','Статистика','Point est', '2.5% CI', '97.5% CI']))
+            },
+            ignore_index=True
+        )
+
+    return data.reindex(columns=['Factor', 'Method', 'Statistic', 'Point Estimate', '2.5% CI', '97.5% CI'])
 
 ## Proportions
 
 def binary_95CI(df, cat_vars):
+    """Calculates the 95% confidence interval for binary variables in a DataFrame.
+
+    Args:
+        df (pandas.DataFrame): The input DataFrame containing binary variables.
+        cat_vars (list): List of names of binary variables for which to calculate confidence intervals.
+
+    Returns:
+        pandas.DataFrame: A DataFrame with the results including factor, point estimate,
+            lower bound of the confidence interval (2.5%), and upper bound of the confidence interval (97.5%).
+
+    Notes:
+        - Point estimates and confidence intervals are calculated using the proportion_confint function from statsmodels.
+        - All values are multiplied by 100 to represent them as percentages.
+    """
     data = pd.DataFrame()
     for col in df[cat_vars].columns:
         name = df[col].name
         A = np.asarray(df[col].dropna())
-        point = np.sum(A)/len(A)
+        point = np.sum(A) / len(A)
         CI = proportion_confint(np.sum(A), len(A))
         low = CI[0]
         high = CI[1]
 
-        data = data.append({'Фактор': name, 'Point': round(point*100, 1),'2.5% CI': round(low*100, 1), '97.5% CI': round(high*100, 1)}, ignore_index=True) #
-        
-    return(data.reindex(columns=['Фактор', 'Point', '2.5% CI', '97.5% CI']))
+        data = data.append({'Factor': name, 'Point': round(point * 100, 1), '2.5% CI': round(low * 100, 1), '97.5% CI': round(high * 100, 1)}, ignore_index=True)
+
+    return data.reindex(columns=['Factor', 'Point', '2.5% CI', '97.5% CI'])
 
 # +----------------------------------------------------------------------------------
 # +----------------------------------------------------------------------------------
@@ -855,6 +947,142 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
     model_tab[['HR', 'lower CI',	'upper CI']] = model_tab[['HR', 'lower CI',	'upper CI']].round(2)
     model_tab[['p-val']] = model_tab[['p-val']].round(3)
     return model_tab    
+
+
+def onedim_logistic(df, target, adj=False, adj_cols_lst=None):
+    """AI is creating summary for onedim_logistic_regression
+
+    Args:
+        df: original dataframe 
+        target: binary target column (0/1)
+        adj (bool, optional): do we need to adjust for covariates? Defaults to False.
+        adj_cols_lst (List): if adj == True, provide list of covariates for adjustments. Defaults to None.
+    """    
+    columns = [x for x in df.columns if x != target]
+
+    logreg_results = pd.DataFrame()
+
+    # If adjustment is needed, we fit the model including adjusted columns but do not include them in results
+    if adj_cols_lst is not None:
+        for col in columns:
+            try:
+                # Prepare the data
+                X = df[[col] + adj_cols_lst].dropna()
+                y = df[target].loc[X.index]
+                
+                # Fit the logistic regression model
+                model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
+                
+                # Extract coefficients and statistics
+                OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
+                p = round(model.pvalues[col], 3)          # p-value
+                conf_int = model.conf_int().loc[col]
+                conf0 = round(np.exp(conf_int[0]), 2)     # Lower CI
+                conf1 = round(np.exp(conf_int[1]), 2)     # Upper CI
+
+            except Exception as e:
+                OR = 'NA'
+                p = 1
+                conf0 = 'NA'
+                conf1 = 'NA'
+
+            logreg_results = pd.concat(
+                [logreg_results,
+                 pd.DataFrame({'Фактор': col, 'OR': OR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1, 'p_val': p}, index=[0])],
+                ignore_index=True)
+            logreg_results = logreg_results[~logreg_results['Фактор'].isin(adj_cols_lst)]
+
+    else:
+        # Fit models without adjustment
+        for col in columns:
+            try:
+                # Prepare the data
+                X = df[[col]].dropna()
+                y = df[target].loc[X.index]
+                
+                # Fit the logistic regression model
+                model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
+                
+                # Extract coefficients and statistics
+                OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
+                p = round(model.pvalues[col], 3)          # p-value
+                conf_int = model.conf_int().loc[col]
+                conf0 = round(np.exp(conf_int[0]), 2)     # Lower CI
+                conf1 = round(np.exp(conf_int[1]), 2)     # Upper CI
+
+            except Exception as e:
+                OR = 'NA'
+                p = 1
+                conf0 = 'NA'
+                conf1 = 'NA'
+
+            logreg_results = pd.concat(
+                [logreg_results,
+                 pd.DataFrame({'Фактор': col, 'OR': OR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1, 'p_val': p}, index=[0])],
+                ignore_index=True)
+
+    logreg_results = logreg_results.reindex(columns=['Фактор', 'OR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+
+    return logreg_results
+
+
+
+def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
+    """AI is creating summary for step_logistic
+
+    Args:
+        df: original dataframe 
+        target: binary target column (0/1)
+        vars: variables to select from for multivariate model
+        iterations: number of steps. Defaults to 1000.
+        threshold: p-value threshold for variable selection. Defaults to 0.05.
+
+    Returns:
+        model_tab: multivariate logistic regression model summary
+    """    
+    var_lst = vars.copy()
+    model_results = pd.DataFrame()
+
+    for number in range(iterations):
+        # Fit the logistic regression model with current variables
+        X = df[var_lst].dropna()
+        y = df[target].loc[X.index]
+        
+        if len(y) == 0:
+            break  # Exit if there are no observations
+        
+        model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
+
+        # Get p-values and find the maximum p-value
+        p_values = model.pvalues[1:]  # Exclude the intercept
+        p_max = p_values.max()
+
+        # Check if the maximum p-value is below the threshold
+        if p_max < threshold:
+            break
+        else:
+            # Remove the variable with the highest p-value
+            index_p_max = p_values.idxmax()
+            list(var_lst).remove(index_p_max)
+
+    # Final model fitting with selected variables
+    final_model = sm.Logit(y, sm.add_constant(df[var_lst].dropna())).fit(disp=0)
+    
+    # Prepare summary table
+    model_tab = final_model.summary2().tables[1].reset_index()
+    model_tab.columns = ['Factor', 'Coef', 'Std Err', 'z', 'P>|z|', '[0.025', '0.975]']
+    
+    # Calculate Odds Ratios and Confidence Intervals
+    model_tab['OR'] = np.exp(model_tab['Coef'])
+    model_tab['lower CI'] = np.exp(model_tab['[0.025'])
+    model_tab['upper CI'] = np.exp(model_tab['0.975]'])
+    
+    # Select relevant columns and round values
+    model_tab = model_tab[['Factor', 'OR', 'lower CI', 'upper CI', 'P>|z|']]
+    model_tab[['OR', 'lower CI', 'upper CI']] = model_tab[['OR', 'lower CI', 'upper CI']].round(2)
+    model_tab[['P>|z|']] = model_tab[['P>|z|']].round(3)
+
+    return model_tab
 
 # +----------------------------------------------------------------------------------
 # +----------------------------------------------------------------------------------
