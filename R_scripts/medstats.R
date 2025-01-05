@@ -577,12 +577,15 @@ summary_all = function(
 compare_all = function(
     data,
     group_var, 
-    digits = 1
+    digits = 1,
+    allnonnormal = FALSE
 ) {
   # Arguments
   # ---------
   # data: data frame, tibble
   # group_var: grouping variable as a character e.g. "group" 
+  # digits: number of digits
+  # allnonnormal: if TRUE force to treat all the numeric data as unnormally distributed
   # 
   # Returns
   # -------
@@ -603,7 +606,7 @@ compare_all = function(
   # Calculating stats
   data[[group_var]] = factor(data[[group_var]])
   
-  if (length(levels(data[[group_var]])) < 3) {
+  if ((length(levels(data[[group_var]])) < 3) & allnonnormal == FALSE) {
     
     df = data %>% 
       tbl_summary(
@@ -620,6 +623,40 @@ compare_all = function(
         pvalue_fun = ~style_pvalue(.x, digits = 3),
         list(columns_printer(normal) ~ "t.test",
              columns_printer(unnormal) ~ "wilcox.test")) %>% as_tibble()
+
+  } else if ((length(levels(data[[group_var]])) < 3) & allnonnormal == TRUE) {
+
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(c(normal, unnormal) ~ "wilcox.test")) %>% as_tibble()
+
+   } else if ((length(levels(data[[group_var]])) >= 3) & allnonnormal == TRUE) {
+
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(c(normal, unnormal) ~ "kruskal.test")) %>% as_tibble() 
     
   } else {
     df = data %>% 
@@ -667,10 +704,6 @@ compare_all = function(
   } else {
     na$Var = colnames(data)[-1]
   }
-  #na$Var = colnames(data)[-1]
-  
-  #tryCatch({na$Var = colnames(data)}, 
-  #                  function(e) {na$Var = colnames(data)[-1]})
   
   ncols = c()
   
