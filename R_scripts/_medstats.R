@@ -399,6 +399,45 @@ table_shapiro = function(data) {
 # Produces table with Var, valid_N, mean+sd, median[iqr], shapiro_test_p value
 # Can be saved via writexl
 
+# summary_all = function(
+#     data) {
+#   
+#   # calculates shapiro tests for numeric data
+#   shap_df = table_shapiro(data)
+#   
+#   # Initialisation of resulting tibble
+#   df = NULL
+#   
+#   # calculates table with means and medians for numeric data
+#   df = data %>% 
+#     tbl_summary(
+#       missing="no", 
+#       type = list(data %>% 
+#                     select(where(is.numeric)) %>% 
+#                     colnames() %>% columns_printer() ~ 'continuous2'),
+#       digits = c(all_continuous() ~ c(1,1),
+#                  all_categorical() ~ c(0,1)),
+#       statistic = all_continuous() ~ c("{mean} ± {sd}", 
+#                                        "{median} [{p25}; {p75}]")) %>% 
+#     add_n() %>% as_tibble()
+# 
+#   colnames(df) = c('Var', 'Valid_N','Stat')
+#   
+#   # combines tables with shapiro test
+#   df %<>% 
+#     left_join(shap_df, by = 'Var')
+#   
+#   # creates index variable and puts variables into wright order
+#   df$index = seq(length(rownames(df)))
+#   df %<>% relocate(
+#     index, Var, Valid_N, Stat, Shapiro_test_p
+#   )
+#   colnames(df) = c('Индекс', 'Показатель', 'Валидные N','Статистика',
+#                    'Тест Ш-У, значимость')
+#   
+#   return(df)
+# }
+
 summary_all = function(
     data, digits = 1) {
   
@@ -457,309 +496,236 @@ summary_all = function(
 # 
 # Can be saved via writexl
 
-compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
-  # Get unique groups in the original order
-  groups <- levels(df[[group_var]]) 
-  if(is.null(groups)) groups <- unique(df[[group_var]]) 
-  n_groups <- length(groups)
-  
-  # Create format strings based on digits parameter
-  mean_format <- paste0("%.", digits, "f ± %.", digits, "f")
-  median_format <- paste0("%.", digits, "f [%.", digits, "f, %.", digits, "f]")
-  minmax_format <- paste0("(%.", digits, "f; %.", digits, "f)")
-  
-  # Initialize results dataframe
-  results <- data.frame()
-  row_id <- 1
-  
-  # Process each variable in the dataframe
-  for(var in names(df)[!names(df) %in% group_var]) {
-    
-    if(is.numeric(df[[var]])) {
-      # For numeric variables
-      
-      # Check normality using Shapiro test
-      is_normal <- all(sapply(groups, function(g) {
-        subset_data <- df[[var]][df[[group_var]] == g]
-        shapiro.test(subset_data)$p.value > 0.05
-      }))
-      
-      # Calculate summary statistics
-      summary_stats <- df %>%
-        group_by(!!sym(group_var)) %>%
-        summarise(
-          mean_sd = sprintf(mean_format, 
-                          mean(!!sym(var), na.rm = TRUE), 
-                          sd(!!sym(var), na.rm = TRUE)),
-          median_iqr = sprintf(median_format, 
-                             median(!!sym(var), na.rm = TRUE),
-                             quantile(!!sym(var), 0.25, na.rm = TRUE),
-                             quantile(!!sym(var), 0.75, na.rm = TRUE)),
-          minmax = sprintf(minmax_format,
-                         min(!!sym(var), na.rm = TRUE),
-                         max(!!sym(var), na.rm = TRUE)),
-          N = sum(!is.na(!!sym(var)))
-        )
-      
-      # Perform statistical test and determine test name
-      if(n_groups == 2) {
-        if(is_normal) {
-          test_result <- t_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "t-тест Стьюдента"
-        } else {
-          test_result <- wilcox_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "Тест Вилкоксона"
-        }
-      } else {
-        if(is_normal) {
-          test_result <- anova_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "Однофакторный дисперсионный анализ"
-        } else {
-          test_result <- kruskal_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "Тест Краскела-Уоллиса"
-        }
-      }
-      
-      # Determine number of rows needed
-      n_rows <- if(add_minmax) 3 else 2
-      
-      # Create base rows
-      base_row <- data.frame(
-        id = row_id:(row_id + n_rows - 1),
-        Фактор = c(var, rep("", n_rows - 1)),
-        Статистика = c("среднее ± СО", 
-                      "медиана [25%; 75%]",
-                      if(add_minmax) "Мин - Макс" else NULL),
-        test_used = c(test_name, rep("", n_rows - 1)),
-        p_value = c(sprintf("%.3f", p_value), rep("", n_rows - 1))
-      )
-      
-      # Add group values and N's
-      for(i in seq_along(groups)) {
-        base_row[[groups[i]]] <- c(
-          summary_stats$mean_sd[i],
-          summary_stats$median_iqr[i],
-          if(add_minmax) summary_stats$minmax[i] else NULL
-        )
-        base_row[[paste0("n", i)]] <- summary_stats$N[i]
-      }
-      
-      results <- rbind(results, base_row)
-      row_id <- row_id + n_rows
-      
-    } else if(is.factor(df[[var]])) {
-      # For factor variables
-      
-      # Get factor levels
-      var_levels <- levels(df[[var]])
-      if(is.null(var_levels)) var_levels <- unique(df[[var]][!is.na(df[[var]])])
-      
-      # Calculate frequencies and percentages for each category in each group
-      summary_stats <- df %>%
-        group_by(!!sym(group_var)) %>%
-        summarise(
-          valid_n = sum(!is.na(!!sym(var))),
-          .groups = "drop"
-        )
-      
-      # Create contingency table
-      cont_table <- table(df[[var]], df[[group_var]], useNA = "no")
-      
-      # Perform chi-square or Fisher's exact test
-      if(any(cont_table < 5)) {
-        test_result <- fisher.test(cont_table, simulate.p.value = TRUE)
-        test_name <- "Точный тест Фишера"
-      } else {
-        test_result <- chisq.test(cont_table)
-        test_name <- "Хи-квадрат тест"
-      }
-      p_value <- test_result$p.value
-      
-      # Create rows for each category
-      for(level in var_levels) {
-        base_row <- data.frame(
-          id = row_id,
-          Фактор = ifelse(level == var_levels[1], var, ""),
-          Статистика = level,
-          test_used = ifelse(level == var_levels[1], test_name, ""),
-          p_value = ifelse(level == var_levels[1], sprintf("%.3f", p_value), "")
-        )
-        
-        # Calculate n and % for each group
-        for(i in seq_along(groups)) {
-          n_category <- sum(df[[var]] == level & df[[group_var]] == groups[i], na.rm = TRUE)
-          pct <- 100 * n_category / summary_stats$valid_n[i]
-          base_row[[groups[i]]] <- sprintf("%d (%.1f%%)", n_category, pct)
-          base_row[[paste0("n", i)]] <- summary_stats$valid_n[i]
-        }
-        
-        results <- rbind(results, base_row)
-        row_id <- row_id + 1
-      }
-    }
-  }
-  
-  # Reorder columns
-  col_order <- c("id", "Фактор", "Статистика")
-  col_order <- c(col_order, groups)
-  col_order <- c(col_order, paste0("n", 1:n_groups))
-  col_order <- c(col_order, "test_used", "p_value")
-  
-  # Rename final columns
-  results <- results[, col_order]
-  names(results)[names(results) == "test_used"] <- "Статистический тест"
-  names(results)[names(results) == "p_value"] <- "Значимость, р"
-  
-  return(results)
-}
+# compare_all = function(
+#     data,
+#     group_var
+# ) {
+#   # Arguments
+#   # ---------
+#   # data: data frame, tibble
+#   # group_var: grouping variable as a character e.g. "group" 
+#   # 
+#   # Returns
+#   # -------
+#   # tibble
+#   
+#   # Estimate nueric variables distributions
+#   shap_df = table_shapiro(data)
+#   shap_df %<>% mutate(Distr = ifelse(Shapiro_test_p < 0.05, "Ненормальное", 
+#                                      "Нормальное"))
+#   
+#   # creates vectors with normal and unnormal distributions
+#   normal = shap_df$Var[shap_df$Shapiro_test_p >= 0.05]
+#   unnormal = shap_df$Var[shap_df$Shapiro_test_p < 0.05]
+#   
+#   # Initialisation of resulting tibble
+#   df = NULL
+#   
+#   # Calculating stats
+#   data[[group_var]] = factor(data[[group_var]])
+#   
+#   if (length(levels(data[[group_var]])) < 3) {
+#     
+#     df = data %>% 
+#       tbl_summary(
+#         by = group_var,
+#         missing="no", 
+#         type = list(data %>% 
+#                       select(where(is.numeric)) %>% 
+#                       colnames() %>% columns_printer() ~ 'continuous2'),
+#         digits = c(all_continuous() ~ c(1,1),
+#                    all_categorical() ~ c(0,1)),
+#         statistic = all_continuous() ~ c("{mean} ± {sd}", 
+#                                          "{median} [{p25}; {p75}]")) %>% 
+#       add_n() %>% add_p(
+#         pvalue_fun = ~style_pvalue(.x, digits = 3),
+#         list(columns_printer(normal) ~ "t.test",
+#              columns_printer(unnormal) ~ "wilcox.test")) %>% as_tibble()
+#     
+#   } else {
+#     df = data %>% 
+#       tbl_summary(
+#         by = group_var,
+#         missing="no", 
+#         type = list(data %>% 
+#                       select(where(is.numeric)) %>% 
+#                       colnames() %>% columns_printer() ~ 'continuous2'),
+#         digits = c(all_continuous() ~ c(1,1),
+#                    all_categorical() ~ c(0,1)),
+#         statistic = all_continuous() ~ c("{mean} ± {sd}", 
+#                                          "{median} [{p25}; {p75}]")) %>% 
+#       add_n() %>% add_p(
+#         pvalue_fun = ~style_pvalue(.x, digits = 3),
+#         list(columns_printer(normal) ~ "aov",
+#              columns_printer(unnormal) ~ "kruskal.test")) %>% as_tibble() 
+#   }
+#   
+#   # Changing names, order, creating index variable, distribution variable
+#   colnames(df) = c('Var', 'Valid_N', levels(data[[group_var]]), 'p_val')
+#   df %<>% left_join(shap_df[c('Var', 'Distr')], by = 'Var')
+#   df$index = seq(length(rownames(df)))
+#   df %<>% relocate(
+#     index, Var, Valid_N, levels(data[[group_var]]), p_val, Distr
+#   )
+#   
+#   colnames(df) = c('Индекс', 'Показатель', 'Валидные N',
+#                    levels(data[[group_var]]), 'Значимость, р', 'Распределение')
+#   
+#   return(df)
+# }
 
-
-pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
-
-  #' Perform Pairwise Comparisons Across Groups
-  #'
-  #' This function performs pairwise comparisons for each variable in a dataset,
-  #' excluding the grouping variable. It automatically selects the appropriate
-  #' statistical test based on the data type and distribution.
-  #'
-  #' @param data A data frame containing the variables to compare.
-  #' @param group_var The name of the column in `data` that defines the groups.
-  #' @param p_adjust_method The method to use for p-value adjustment. Defaults to "none".
-  #'   See `p.adjust()` for available methods.
-  #'
-  #' @details
-  #'   - For numeric variables, it checks normality using the Shapiro-Wilk test.
-  #'     If normal, it performs pairwise t-tests; otherwise, it uses pairwise Wilcoxon tests.
-  #'   - For categorical variables, it uses Fisher's exact test if any expected frequency is less than 5;
-  #'     otherwise, it uses the Chi-square test.
-  #'
-  #' @return A data frame with pairwise comparison results. Each row corresponds to a variable,
-  #'   and columns represent p-values for each pair of groups.
-  #'
-  #' @examples
-  #'   # Example usage
-  #'   data <- data.frame(
-  #'     group = c("A", "B", "C", "A", "B", "C"),
-  #'     var1 = rnorm(6),
-  #'     var2 = sample(c("Yes", "No"), 6, replace = TRUE)
-  #'   )
-  #'   
-  #'   results <- pairwise_comparisons(data, "group", p_adjust_method = "holm")
-  #'   print(results)
+compare_all = function(
+    data,
+    group_var, 
+    digits = 1,
+    allnonnormal = FALSE
+) {
+  # Arguments
+  # ---------
+  # data: data frame, tibble
+  # group_var: grouping variable as a character e.g. "group" 
+  # digits: number of digits
+  # allnonnormal: if TRUE force to treat all the numeric data as unnormally distributed
+  # 
+  # Returns
+  # -------
+  # tibble
   
-  # Check if group variable has more than 2 levels
-  if(length(unique(data[[group_var]])) <= 2) {
-    stop("Grouping variable must have more than 2 levels")
-  }
+  # Estimate nueric variables distributions
+  shap_df = table_shapiro(data)
+  shap_df %<>% mutate(Distr = ifelse(Shapiro_test_p < 0.05, "Ненормальное", 
+                                     "Нормальное"))
   
-  # Initialize empty list to store results
-  results_list <- list()
-  row_counter <- 1
+  # creates vectors with normal and unnormal distributions
+  normal = shap_df$Var[shap_df$Shapiro_test_p >= 0.05]
+  unnormal = shap_df$Var[shap_df$Shapiro_test_p < 0.05]
   
-  # Get all variable names except grouping variable
-  vars <- names(data)[names(data) != group_var]
+  # Initialisation of resulting tibble
+  df = NULL
   
-  for(var in vars) {
-    # Skip if all values are NA
-    if(all(is.na(data[[var]]))) next
+  # Calculating stats
+  data[[group_var]] = factor(data[[group_var]])
+  
+  if ((length(levels(data[[group_var]])) < 3) & allnonnormal == FALSE) {
     
-    if(is.numeric(data[[var]])) {
-      # Check normality using Shapiro-Wilk test
-      shapiro_test <- shapiro.test(data[[var]])
-      is_normal <- shapiro_test$p.value > 0.05
-      
-      if(is_normal) {
-        # Pairwise t-test for normal data
-        test_result <- data %>%
-          rstatix::pairwise_t_test(
-            as.formula(paste(var, "~", group_var)),
-            p.adjust.method = p_adjust_method
-          )
-      } else {
-        # Pairwise Wilcoxon test for non-normal data
-        test_result <- data %>%
-          rstatix::pairwise_wilcox_test(
-            as.formula(paste(var, "~", group_var)),
-            p.adjust.method = p_adjust_method
-          )
-      }
-      
-    } else if(is.factor(data[[var]]) || is.character(data[[var]])) {
-      # Convert character to factor if needed
-      if(is.character(data[[var]])) {
-        data[[var]] <- as.factor(data[[var]])
-      }
-      
-      # Get all pairs of groups
-      groups <- unique(data[[group_var]])
-      pairs <- combn(groups, 2, simplify = FALSE)
-      
-      # Initialize results for categorical variables
-      test_result <- data.frame(
-        group1 = character(),
-        group2 = character(),
-        p = numeric(),
-        stringsAsFactors = FALSE
-      )
-      
-      for(pair in pairs) {
-        # Subset data for current pair
-        subset_data <- data[data[[group_var]] %in% pair, ]
-        contingency_table <- table(subset_data[[var]], subset_data[[group_var]])
-        
-        # Determine whether to use Fisher's exact test or Chi-square test
-        expected <- chisq.test(contingency_table)$expected
-        use_fisher <- any(expected < 5)
-        
-        if(use_fisher) {
-          test <- fisher.test(contingency_table)
-        } else {
-          test <- chisq.test(contingency_table)
-        }
-        
-        # Add results
-        test_result <- rbind(test_result, 
-                           data.frame(group1 = pair[1],
-                                    group2 = pair[2],
-                                    p = test$p.value))
-      }
-      
-      # Adjust p-values if needed
-      if(p_adjust_method != "none") {
-        test_result$p <- p.adjust(test_result$p, method = p_adjust_method)
-      }
-    }
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(columns_printer(normal) ~ "t.test",
+             columns_printer(unnormal) ~ "wilcox.test")) %>% as_tibble()
+
+  } else if ((length(levels(data[[group_var]])) < 3) & allnonnormal == TRUE) {
+
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(c(normal, unnormal) ~ "wilcox.test")) %>% as_tibble()
+
+   } else if ((length(levels(data[[group_var]])) >= 3) & allnonnormal == TRUE) {
+
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(c(normal, unnormal) ~ "kruskal.test")) %>% as_tibble() 
     
-    # Format results
-    if(nrow(test_result) > 0) {
-      result_row <- data.frame(
-        id = row_counter,
-        Factor = var
-      )
-      
-      # Add p-values as columns
-      for(i in 1:nrow(test_result)) {
-        col_name <- paste0(test_result$group1[i], " - ", test_result$group2[i])
-        result_row[[col_name]] <- test_result$p[i]
-      }
-      
-      results_list[[length(results_list) + 1]] <- result_row
-      row_counter <- row_counter + 1
-    }
-  }
-  
-  # Combine all results
-  if(length(results_list) > 0) {
-    final_results <- do.call(rbind, results_list)
-    rownames(final_results) <- NULL
-    return(final_results)
   } else {
-    return(data.frame())
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(normal ~ "aov"
+             # columns_printer(unnormal) ~ "kruskal.test"
+            )) %>% as_tibble() 
   }
+  
+  # Changing names, order, creating index variable, distribution variable
+  colnames(df) = c('Var', levels(data[[group_var]]), 'p_val')
+  df %<>% left_join(shap_df[c('Var', 'Distr')], by = 'Var')
+  df$index = seq(length(rownames(df)))
+  df %<>% relocate(
+    index, Var, levels(data[[group_var]]), p_val, Distr
+  )
+  
+  # count valids
+  na = data.frame(is.na(data))
+  na = na + 1
+  na = na %>% mutate_all(funs(recode(., `1` = 1L, `2` = 0L)))
+  na[[group_var]] = data[[group_var]]
+  
+  na %<>% 
+    group_by(na[[group_var]]) %>% select(-group_var) %>%
+    summarise(across(everything(), sum)) %>% t() 
+  
+  na = na[-1,]
+  
+  na = data.frame(na)
+  
+  if (dim(na)[1] == length(colnames(data))) {
+    na$Var = colnames(data)
+  } else {
+    na$Var = colnames(data)[-1]
+  }
+  
+  ncols = c()
+  
+  for (i in seq(length(columns_printer(colnames(na)[grepl('X', colnames(na))])))) {
+    ncols = c(ncols, paste0('N', i))
+  }
+  
+  colnames(na) = c(ncols, 'Var')
+  
+  df %<>% left_join(na, by = 'Var')
+  df %<>% relocate(
+    index, Var, levels(data[[group_var]]), p_val, Distr, ncols
+  )
+  
+  colnames(df) = c('Индекс', 'Показатель', 
+                   levels(data[[group_var]]), 'Значимость, р', 'Распределение',
+                   ncols)
+    df$`Показатель` = lex_coder(df$`Показатель`, 
+      c("Mean ± SD", "Median [25%; 75%]"), 
+      c("Среднее ± Ст.откл.", "Медиана и [25%; 75%]"))
+  
+  return(df)
 }
 
 # +-----------------------------------------------------------------------------
