@@ -1,7 +1,11 @@
 # Main functions file
 #
+# 14-Nov-2023
+#
 # To load script run
 # source("/home/guest/Yandex.Disk/GitHub/r-medstats/medstats.R")
+# or
+# source("/home/guest/Документы/medstats/R_scripts/medstats.R")
 #
 # env R_HOME=/usr/lib64/R radian  --NOT RUN
 # radian --r-binary=/usr/bin/R    --NOT RUN
@@ -12,6 +16,7 @@ library(magrittr)
 library(fastDummies)
 library(DescTools)
 library(pROC)
+library(boot)
 
 # TO READ
 # Emmeans contrasts:
@@ -70,6 +75,76 @@ lex_coder = function(vec, olds, news) {
     vec[vec == olds[i]] = news[i]
   }
   return(vec)
+}
+
+# +-----------------------------------------------------------------------------
+
+# This `lex_coder` is used to change R latin variable names into Cyrillic beautiful names
+# with special symbols, i.e. `%`, `/`, etc for functions `summary_all`,`compare_all`... 
+
+
+lex_coder_stat_tables =\(stat_table, column_to_change_values, stat_vector, old_patterns, new_patterns, from_table = TRUE) {
+
+  # Example
+  # -------
+
+  # FROM DATA FRAME
+  # stat_table_descriptives = df |> select(c(glucose, creat, hb)) |> summary_all()
+  
+  # old_patterns = which(names(df) %in% c('glucose', 'creat',	'hb'))
+  # new_patterns = c('xxxx1', 'xxxx2', 'xxxx3')
+
+  # lex_coder_stat_tables(
+  #     stat_table = stat_table_descriptives,
+  #     column_to_change_values'Показатель',
+  #     old_patterns = old_patterns,
+  #     new_patterns =new_patterns,
+  #     from_table = TRUE) |> write_xlsx('111.xlsx')
+
+  # FROM VECTOR
+  # stat_vector = stat_table[column_to_change_values] |> pull()
+  
+  # old_patterns = which(names(df) %in% c('glucose', 'creat',	'hb'))
+  # new_patterns = c('xxxx1', 'xxxx2', 'xxxx3')
+
+  # lex_coder_stat_tables(
+  #     stat_vector = stat_vector
+  #     old_patterns = old_patterns,
+  #     new_patterns =new_patterns,
+  #     from_table = FALSE)
+
+
+  if (from_table == TRUE) {
+
+    pulled_vec = stat_table[column_to_change_values] |> pull()
+
+
+    for (i in seq(length(pulled_vec))) {
+        for (j in seq(length(old_patterns))) {
+            if (pulled_vec[i] == old_patterns[j]) {
+                
+                pulled_vec[i] = new_patterns[j]
+            }
+        }
+    }
+
+    stat_table[column_to_change_values] = pulled_vec
+    return(stat_table)
+
+  } else {
+
+
+    for (i in seq(length(stat_vector))) {
+        for (j in seq(length(old_patterns))) {
+            if (stat_vector[i] == old_patterns[j]) {
+                stat_vector[i] = new_patterns[j]
+            }
+        }
+    }
+
+   return(stat_vector)
+  }
+
 }
 
 # +-----------------------------------------------------------------------------
@@ -209,6 +284,55 @@ data_filler = function(data, fact_lst=NULL, numeric_lst=NULL) {
   }
   
   return(data)
+}
+
+# Find unique factors with levels <= 7
+# Return names of the factors
+FactorFinder = \(data_frame, min_factor_levels = 7) {
+
+    index = data_frame |> summarise_all(
+        ~ (length(unique(., na.rm = T)))) <= min_factor_levels 
+    return(colnames(data_frame)[index])
+}
+
+# +-----------------------------------------------------------------------------
+
+# Find unique factors with levels <= 7 and transform them to factors by default
+# Return transformed data_frame (not imputed!)
+FactorTransformer = \(data_frame, min_factor_levels = 7) {
+    return(
+        data_frame |> 
+        mutate(
+            across(
+                FactorFinder(data_frame, min_factor_levels), factor
+                )
+                )
+                )
+}
+
+# Add uniform noise to continuous var with min = 0, max = SE OR 
+# add normal noise to continuous var with mean = 0 and sd = SE
+ContNoiser = \(x, method = 'unif', z_scores = 1, seed = 0) {
+    if (method == 'unif') {
+        set.seed = seed
+        noise = runif(
+            length(x),
+            min = 0,
+            # max = DescTools::MeanSE(x)
+            max = z_scores * sd(x, na.rm = TRUE)
+            )
+    } else if (method == 'norm') {
+        set.seed = seed
+        noise = rnorm(
+            length(x),
+            0,
+            # DescTools::MeanSE(x)
+            z_scores * sd(x, na.rm = TRUE)
+            )
+    } else {
+        print('error')
+    }
+    return(x + noise)
 }
 
 # +-----------------------------------------------------------------------------
@@ -453,12 +577,15 @@ summary_all = function(
 compare_all = function(
     data,
     group_var, 
-    digits = 1
+    digits = 1,
+    allnonnormal = FALSE
 ) {
   # Arguments
   # ---------
   # data: data frame, tibble
   # group_var: grouping variable as a character e.g. "group" 
+  # digits: number of digits
+  # allnonnormal: if TRUE force to treat all the numeric data as unnormally distributed
   # 
   # Returns
   # -------
@@ -479,7 +606,7 @@ compare_all = function(
   # Calculating stats
   data[[group_var]] = factor(data[[group_var]])
   
-  if (length(levels(data[[group_var]])) < 3) {
+  if ((length(levels(data[[group_var]])) < 3) & allnonnormal == FALSE) {
     
     df = data %>% 
       tbl_summary(
@@ -496,6 +623,40 @@ compare_all = function(
         pvalue_fun = ~style_pvalue(.x, digits = 3),
         list(columns_printer(normal) ~ "t.test",
              columns_printer(unnormal) ~ "wilcox.test")) %>% as_tibble()
+
+  } else if ((length(levels(data[[group_var]])) < 3) & allnonnormal == TRUE) {
+
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(c(normal, unnormal) ~ "wilcox.test")) %>% as_tibble()
+
+   } else if ((length(levels(data[[group_var]])) >= 3) & allnonnormal == TRUE) {
+
+    df = data %>% 
+      tbl_summary(
+        by = group_var,
+        missing="no", 
+        type = list(data %>% 
+                      select(where(is.numeric)) %>% 
+                      colnames() %>% columns_printer() ~ 'continuous2'),
+        digits = c(all_continuous() ~ c(digits, digits),
+                   all_categorical() ~ c(0,1)),
+        statistic = all_continuous() ~ c("{mean} ± {sd}", 
+                                         "{median} [{p25}; {p75}]")) %>% 
+      add_p(
+        pvalue_fun = ~style_pvalue(.x, digits = 3),
+        list(c(normal, unnormal) ~ "kruskal.test")) %>% as_tibble() 
     
   } else {
     df = data %>% 
@@ -511,8 +672,9 @@ compare_all = function(
                                          "{median} [{p25}; {p75}]")) %>% 
       add_p(
         pvalue_fun = ~style_pvalue(.x, digits = 3),
-        list(columns_printer(normal) ~ "aov",
-             columns_printer(unnormal) ~ "kruskal.test")) %>% as_tibble() 
+        list(normal ~ "aov"
+             # columns_printer(unnormal) ~ "kruskal.test"
+            )) %>% as_tibble() 
   }
   
   # Changing names, order, creating index variable, distribution variable
@@ -542,10 +704,6 @@ compare_all = function(
   } else {
     na$Var = colnames(data)[-1]
   }
-  #na$Var = colnames(data)[-1]
-  
-  #tryCatch({na$Var = colnames(data)}, 
-  #                  function(e) {na$Var = colnames(data)[-1]})
   
   ncols = c()
   
@@ -648,18 +806,18 @@ univariate_linear_regr = function(data, dep_var) {
     tryCatch(
       {a = tidy(summary(lm(as.formula(paste(dep_var, '~.')), data[c(dep_var, col)])))[2,] %>%
         select(c(term, estimate, 
-                 std.error, statistic))}
+                 std.error, statistic)) |> mutate(term = col)}
       , error = function(e) {a <<- data.frame(term = col,
-                                              estimate = )})
+                                              estimate = NA)})
     
     
     tryCatch(
       {b = glance(lm(as.formula(paste(dep_var, '~.')), 
                      data[c(dep_var, col)]))[c('adj.r.squared','p.value')]}
-      , error = function(e) {b <<- data.frame(std.error   = ,
-                                              statistic  = ,
-                                              adj.r.squared = ,
-                                              p.value = )})
+      , error = function(e) {b <<- data.frame(std.error   = NA,
+                                              statistic  = NA,
+                                              adj.r.squared = NA,
+                                              p.value = NA)})
     
     a = cbind(a, b)
     
@@ -667,15 +825,35 @@ univariate_linear_regr = function(data, dep_var) {
     
   }
   colnames(ddd) = c('Показатель','Коэфф','SE','t.stat','Adj.R.squared', 'p-val')
-  ddd$`Индекс` = rownames(ddd) = seq(length(rownames(ddd)))
-
-  ddd %<>% mutate(
-                  `Коэфф`= round(`Коэфф`, 3),
+  
+  # Бинарные факторы в таблице автоматически получают суффикс "1", т.к. 1-я категория оценивается. 
+  # Ниже убираем единицы из названий факторов
+  
+  var_names = ddd$`Показатель`
+  for (i in seq(length(var_names))) {
+      s = var_names[i]
+      if (is.na(s) == T) {
+          s = 'No-name' 
+      }
+      if (str_sub(s,-1) == "1") {
+          s = substring(s,1, nchar(s)-1)
+      }
+      var_names[i] = s
+  }
+  ddd$`Показатель` = var_names
+  ddd = ddd |> filter(`Показатель` != 'No-name')
+  
+  
+  rownames(ddd) = seq(length(rownames(ddd)))
+  ddd %<>% mutate(`Индекс` = as.numeric(rownames(ddd)),
+                `Коэфф`= round(`Коэфф`, 3),
                   SE = round(SE, 3),
                   t.stat = round(t.stat, 3),
                   `Adj.R.squared` = round(`Adj.R.squared`, 3),
                   `p-val` = round(`p-val`, 3))
-  return(ddd[c('Индекс', 'Показатель','Коэфф','SE','t.stat','Adj.R.squared', 'p-val')])
+  
+  
+  return(ddd |> select(c("Индекс","Показатель", "Коэфф", "SE", "t.stat", "Adj.R.squared", "p-val")))
 }
 
 # Correlation models
@@ -706,6 +884,25 @@ univariate_cor_test = function(data, dep_var, method = 'spearman') {
                   `p-val` = round(`p-val`, 3))
   return(ddd)
   
+}
+
+## Плоская корреляционная матрица по всей таблице
+
+correlation_flat_matrix = function(df, method = 'spearman') {
+
+    params = t(combn(columns_printer(colnames(df)),2))
+    len = dim(params)[1]
+    cor_matrix = data.frame()
+    for (i in seq(len)) {
+
+        cor_test = cor.test(df[[params[i, c(1)]]], df[[params[i, c(2)]]], method = method)
+        rho = round(cor_test$estimate, 3)
+        p_val = round(cor_test$p.value, 3)
+        cor_matrix = rbind(cor_matrix, c(params[i, c(1)], params[i, c(2)], rho, p_val))
+    }
+
+    colnames(cor_matrix) = c("Factor_1", "Factor_2", "Spearman_rho", "p_val")
+    return(cor_matrix)
 }
 
 
@@ -762,10 +959,23 @@ log_odds_uni = function(data, dep_var) {
   
   rownames(tab) = seq(dim(tab)[1])
   colnames(tab) = c('Фактор', 'OR', 'lower_CI', 'upper_CI', 'p.value')
-  tab$`Индекс` = rownames(tab)
+  tab$`Индекс` = as.numeric(rownames(tab))
   tab %>% mutate(OR = round(OR, 2),
                  lower_CI = round(lower_CI, 2),
                  upper_CI = round(upper_CI, 2))
+  
+  # Бинарные факторы в таблице автоматически получают суффикс "1", т.к. 1-я категория оценивается. 
+  # Ниже убираем единицы из названий факторов
+  
+  var_names = tab$`Фактор`
+  for (i in seq(length(var_names))) {
+    s = var_names[i]
+    if (str_sub(s,-1) == "1") {
+        s = substring(s,1, nchar(s)-1)
+    }
+    var_names[i] = s
+  }
+  tab$`Фактор` = var_names
   
   return(tab[c('Индекс','Фактор', 'OR', 'lower_CI', 'upper_CI', 'p.value')])
 }
@@ -850,6 +1060,20 @@ linear_covariate = \(data, y_var, covariates, scale_data = T) {
         conf.high, std.error, statistic, Adj.R.sq, p.value)
     colnames(or.df) = c('id', 'Factor', 'Coeff', 'lowerCI', 'upperCI', 'SE', 
             'Stat', 'Adj.R.sq', 'p-val')
+  
+    var_names = or.df$Factor
+    for (i in seq(length(var_names))) {
+        s = var_names[i]
+        if (str_sub(s,-1) == "1") {
+            if (str_sub(s,-2) != "_1") {
+                s = substring(s,1, nchar(s)-1) 
+            }
+        }
+        var_names[i] = s
+    }
+    or.df$Factor = var_names
+  
+  
     return(or.df)
 }
 
@@ -867,11 +1091,14 @@ log_covariate = \(dataframe, y_var, covariates) {
     ID = 0
 
     for (col in col_lst) {
+    # foreach(i = 1:length(col_lst)) %do% {
         
         ID = ID + 1
 
         tryCatch({
             model = dataframe |> select(c(y, all_of(covariates), all_of(col))) |> tibble()
+            # model = dataframe |> select(c(y, all_of(covariates), all_of(col_lst[i]))) |> tibble()
+
             model = glm(y ~ ., data = model, family = binomial)
             or.df = model |> tidy(conf.int=T, exponentiate=T) |> 
                 select(term, estimate, conf.low, conf.high, p.value) |> 
@@ -882,16 +1109,32 @@ log_covariate = \(dataframe, y_var, covariates) {
             error = function(e) {
                 or.df = bind_rows(tibble(
                         id = ID,
-                        term = col, 
+                        term = col,
+                        # term = col_lst[i], 
+
                         estimate = NA, 
                         conf.low = NA, 
                         conf.high = NA, 
                         p.value = 1))})
 
     }
+
     or.df = or.df |> arrange(id) |> select(id, term, estimate, conf.low, 
         conf.high, p.value)
     colnames(or.df) = c('id', 'Factor', 'OR', 'lowerCI', 'upperCI', 'p-val')
+
+    var_names = or.df$Factor
+    for (i in seq(length(var_names))) {
+        s = var_names[i]
+        if (str_sub(s,-1) == "1") {
+            if (str_sub(s,-2) != "_1") {
+                s = substring(s,1, nchar(s)-1) 
+            }
+        }
+        var_names[i] = s
+    }
+    or.df$Factor = var_names
+
     return(or.df)
 }
 
@@ -953,9 +1196,12 @@ roc_thresholds = \(real, pred, x="best", input="threshold", full_coords = T) {
 
   }
   
-  roc.tab = ci.coords(roc(real, pred), x = x, input=input,
-  ret = rets
-    ) |> data.frame()
+  roc.tab = tryCatch(
+      {roc.tab = ci.coords(roc(real, pred), x = x, input=input,
+            ret = rets) |> data.frame()}
+      , error = function(e) {roc.tab = 
+        ci.coords(roc(real, pred), x = x, input=input, best.policy = "random",
+            ret = rets) |> data.frame()})
 
   roc.tab = roc.tab |> select(all_of(cols))
 
@@ -985,6 +1231,164 @@ roc_thresholds = \(real, pred, x="best", input="threshold", full_coords = T) {
   return(roc.tab |> rbind(c("AUC", auc_val, auc_ci[1], auc_ci[3])))
 }
 
+# +-----------------------------------------------------------------------------
+# Определение AUC, Sens, Spec, NPV, PPV, Kappa с бустрепом 95% ДИ (Гогниева)
+
+binary_quality = function(real, pred, nboot = 10) {
+    df = data.frame(
+        Real = real,
+        Pred = pred
+    ) |> na.omit()
+
+    idx = seq(length(rownames(df)))
+
+    classification_func = function(frame) {
+
+        real_subset <- frame[, 1]
+        predicted_subset <- frame[, 2]
+
+        if (
+            length(unique(real_subset)) == 2 & length(unique(predicted_subset)
+            ) == 2) {
+
+                # Stats:
+                tp <- sum(real_subset == 1 & predicted_subset == 1)
+                tn <- sum(real_subset == 0 & predicted_subset == 0)
+                fp <- sum(real_subset == 0 & predicted_subset == 1)
+                fn <- sum(real_subset == 1 & predicted_subset == 0)
+                sensitivity <- tp / (tp + fn)
+                specificity <- tn / (tn + fp)
+                ppv <- tp / (tp + fp)
+                npv <- tn / (tn + fn)
+                # kappa <- Kappa(matrix(c(tp, fp, fn, tn), nrow = 2))
+                # kappa_unw = kappa$Unweighted[1] |> as.numeric()
+                # kappa_w = kappa$Weighted[1] |> as.numeric()
+                p0 = (tp + tn) / (tp + fn + tn + fp)
+                pe = ((tp + fn) * (tp + fp) + (fp + tn) * (fn + tn)) / (tp + tn + fp + fn)^2
+                kappa = (p0 - pe) / (1- pe)
+                auc_ci = auc(real_subset, predicted_subset)
+                f1 = 2 * tp / (2 * tp + fp + fn)
+                balanced_acc = (sensitivity + specificity)/2
+
+                return(c(auc_ci, sensitivity, specificity, ppv, npv, f1, balanced_acc, 
+                    kappa))        
+
+        } else {
+            # return(invisible(NULL))
+            return(rep(NA, 8))
+        }
+    }
+
+    res_matrix = matrix(ncol = 8)
+
+    i = 0
+
+    while (i < nboot) {
+
+            new_idx = sample(idx, size = length(idx), replace = T)
+            res_matrix = rbind(
+                res_matrix, 
+                classification_func(df[new_idx,])
+            )
+            res_matrix = na.omit(res_matrix)
+            i = dim(res_matrix)[1]
+
+        }
+
+    res_matrix = t(sapply(1:8, function(i) {
+        quantile(res_matrix[, i], probs = c(.025, .975))
+    })) |> data.frame()
+    colnames(res_matrix) = c('lower', 'upper')
+
+    res_matrix = res_matrix |> mutate(Point_est = classification_func(df),
+        Stats = c('AUC', 'Sens', 'Spec', 'PPV', 'NPV', 'f1', 'balanced_acc', 
+                    'kappa')) |> dplyr::select(c(Stats, Point_est, lower, upper))
+
+    if (res_matrix[1,2] < 0.5) {
+        res_matrix[1,c(2,3,4)] = 1 - res_matrix[1,c(2,3,4)]
+    }
+
+    return(res_matrix)
+}
+
+# Расчет взвешенной каппы Коэна
+
+weighted_kappa_multiclass = function(real, pred) {
+
+    stat = Kappa(table(real, pred))
+    p_e = stat$Weighted[1]
+    lower = stat$Weighted[1] - stat$Weighted[2] * 1.96
+    upper = stat$Weighted[1] + stat$Weighted[2] * 1.96
+    return(c(p_e, lower, upper))
+}
+
+# Определение AUC, Sens, Spec, NPV, PPV, Kappa с расчетом 95% ДИ через binom.test()
+
+binary_quality_binom = function(real_subset, predicted_subset) {
+
+    # Stats:
+    tp <- sum(real_subset == 1 & predicted_subset == 1)
+    tn <- sum(real_subset == 0 & predicted_subset == 0)
+    fp <- sum(real_subset == 0 & predicted_subset == 1)
+    fn <- sum(real_subset == 1 & predicted_subset == 0)
+
+    res = data.frame()
+
+    estimation = c('AUC', 'Sens', 'Spec', 'PPV', 'NPV', 'kappa', 'f1', 'Balanced_acc')
+
+    nom = c(1, tp, tn, tp, tn, 1, (2 * tp), 1)
+    denom = c(1, (tp + fn), (tn + fp), (tp + fp), (tn + fn), 1, (2 * tp + fp + fn), 2)
+
+    for (i in seq(length(estimation))) {
+
+        
+        if (estimation[i] == 'kappa') {
+            if ((length(unique(real_subset)) == 1) | (length(unique(predicted_subset)) == 1)) {
+                point = NA
+                lower = NA
+                upper = NA
+
+            } else {
+            stat = Kappa(table(real_subset, predicted_subset))
+            point = stat$Weighted[1]
+            lower = stat$Weighted[1] - stat$Weighted[2] * 1.96
+            upper = stat$Weighted[1] + stat$Weighted[2] * 1.96
+            }
+
+        } else if (estimation[i] == 'AUC') {
+            AUC = c(auc(real_subset, predicted_subset), ci.auc(real_subset, predicted_subset)[c(1, 3)])
+            point = AUC[1]
+            lower = AUC[2]
+            upper = AUC[3]
+
+        } else if (estimation[i] == 'Balanced_acc') {
+            nnom = (tp / (tp + fn) + tn / (tn + fp))
+            ddenom = 2
+            point = nnom/ddenom
+            bts = binom.test(round(point*(tp + fn + tn + fp)), (tp + fn) + (tn + fp))
+            lower = bts$conf.int[1]
+            upper = bts$conf.int[2]
+
+        } else {
+            if (denom[i] == 0) {
+                point = NA
+                lower = NA
+                upper = NA
+            } else {
+                bts = binom.test(nom[i], denom[i])
+                point = bts$estimate
+                lower = bts$conf.int[1]
+                upper = bts$conf.int[2]
+            }
+        }
+
+        res = rbind(res, c(estimation[i], point, lower, upper))
+    }
+    names(res) = c('Statistic', 'Point_est', '95% lower', '95% upper')
+    res = res |> mutate_at(vars('Point_est', '95% lower', '95% upper'), list(~ round(as.numeric(.),3)))
+
+    return(res)
+}
 
 # +-----------------------------------------------------------------------------
 # +-----------------------------------------------------------------------------
