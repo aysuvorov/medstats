@@ -549,9 +549,22 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
   results <- data.frame()
   row_id <- 1
   
+  # Function to check if a string starts with a number
+  starts_with_number <- function(x) {
+    grepl("^[0-9]", x)
+  }
+
+  orig_col_names = names(df)
+
+  for (i in seq(length(names(df)))) {
+    if (starts_with_number(names(df)[i]) == TRUE) {
+      names(df)[i] = paste0("firstnum_", names(df)[i])
+    }
+  }
+  
   # Process each variable in the dataframe
   for(var in names(df)[!names(df) %in% group_var]) {
-    
+       
     if(is.numeric(df[[var]])) {
       # For numeric variables
       
@@ -679,15 +692,20 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
       }
     }
   }
-  
+
+ 
   # Reorder columns
   col_order <- c("id", "Фактор", "Статистика")
   col_order <- c(col_order, groups)
   col_order <- c(col_order, paste0("n", 1:n_groups))
   col_order <- c(col_order, "test_used", "p_value")
+
+  # Remove prefix "firstnum_" in colnames
+  names(df) = orig_col_names
   
   # Rename final columns
   results <- results[, col_order]
+  results[['Фактор']] <- gsub("firstnum_", "", results[['Фактор']])
   names(results)[names(results) == "test_used"] <- "Статистический тест"
   names(results)[names(results) == "p_value"] <- "Значимость, р"
   
