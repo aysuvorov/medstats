@@ -714,40 +714,8 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
 
 
 pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
-
-  #' Perform Pairwise Comparisons Across Groups
-  #'
-  #' This function performs pairwise comparisons for each variable in a dataset,
-  #' excluding the grouping variable. It automatically selects the appropriate
-  #' statistical test based on the data type and distribution.
-  #'
-  #' @param data A data frame containing the variables to compare.
-  #' @param group_var The name of the column in `data` that defines the groups.
-  #' @param p_adjust_method The method to use for p-value adjustment. Defaults to "none".
-  #'   See `p.adjust()` for available methods.
-  #'
-  #' @details
-  #'   - For numeric variables, it checks normality using the Shapiro-Wilk test.
-  #'     If normal, it performs pairwise t-tests; otherwise, it uses pairwise Wilcoxon tests.
-  #'   - For categorical variables, it uses Fisher's exact test if any expected frequency is less than 5;
-  #'     otherwise, it uses the Chi-square test.
-  #'
-  #' @return A data frame with pairwise comparison results. Each row corresponds to a variable,
-  #'   and columns represent p-values for each pair of groups.
-  #'
-  #' @examples
-  #'   # Example usage
-  #'   data <- data.frame(
-  #'     group = c("A", "B", "C", "A", "B", "C"),
-  #'     var1 = rnorm(6),
-  #'     var2 = sample(c("Yes", "No"), 6, replace = TRUE)
-  #'   )
-  #'   
-  #'   results <- pairwise_comparisons(data, "group", p_adjust_method = "holm")
-  #'   print(results)
-  
   # Check if group variable has more than 2 levels
-  if(length(unique(data[[group_var]])) <= 2) {
+  if (length(unique(data[[group_var]])) <= 2) {
     stop("Grouping variable must have more than 2 levels")
   }
   
@@ -758,40 +726,41 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
   # Get all variable names except grouping variable
   vars <- names(data)[names(data) != group_var]
   
-  for(var in vars) {
+  # Get all unique group pairs for column names
+  groups <- unique(data[[group_var]])
+  group_pairs <- combn(groups, 2, simplify = FALSE)
+  pair_names <- sapply(group_pairs, function(pair) paste0(pair[1], " - ", pair[2]))
+  
+  for (var in vars) {
     # Skip if all values are NA
-    if(all(is.na(data[[var]]))) next
+    if (all(is.na(data[[var]]))) next
     
-    if(is.numeric(data[[var]])) {
+    if (is.numeric(data[[var]])) {
       # Check normality using Shapiro-Wilk test
       shapiro_test <- shapiro.test(data[[var]])
       is_normal <- shapiro_test$p.value > 0.05
       
-      if(is_normal) {
+      if (is_normal) {
         # Pairwise t-test for normal data
         test_result <- data %>%
           rstatix::pairwise_t_test(
             as.formula(paste(var, "~", group_var)),
-            p.adjust.method = p_adjust_method
+            p.adjust.method = "none"  # Changed to "none"
           )
       } else {
         # Pairwise Wilcoxon test for non-normal data
         test_result <- data %>%
           rstatix::pairwise_wilcox_test(
             as.formula(paste(var, "~", group_var)),
-            p.adjust.method = p_adjust_method
+            p.adjust.method = "none"  # Changed to "none"
           )
       }
       
-    } else if(is.factor(data[[var]]) || is.character(data[[var]])) {
+    } else if (is.factor(data[[var]]) || is.character(data[[var]])) {
       # Convert character to factor if needed
-      if(is.character(data[[var]])) {
+      if (is.character(data[[var]])) {
         data[[var]] <- as.factor(data[[var]])
       }
-      
-      # Get all pairs of groups
-      groups <- unique(data[[group_var]])
-      pairs <- combn(groups, 2, simplify = FALSE)
       
       # Initialize results for categorical variables
       test_result <- data.frame(
@@ -801,45 +770,76 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
         stringsAsFactors = FALSE
       )
       
-      for(pair in pairs) {
+      for (pair in group_pairs) {
         # Subset data for current pair
         subset_data <- data[data[[group_var]] %in% pair, ]
         contingency_table <- table(subset_data[[var]], subset_data[[group_var]])
         
-        # Determine whether to use Fisher's exact test or Chi-square test
-        expected <- chisq.test(contingency_table)$expected
-        use_fisher <- any(expected < 5)
-        
-        if(use_fisher) {
-          test <- fisher.test(contingency_table)
+        # Check if contingency table has at least 2 rows and 2 columns
+        if (nrow(contingency_table) >= 2 && ncol(contingency_table) >= 2) {
+          if (any(contingency_table < 5)) {
+            tryCatch({
+              test <- fisher.test(contingency_table)
+              # Add results
+              test_result <- rbind(test_result, 
+                                 data.frame(group1 = pair[1],
+                                          group2 = pair[2],
+                                          p = test$p.value,
+                                          stringsAsFactors = FALSE))
+            }, error = function(e) {
+              warning(sprintf("Fisher's exact test failed for %s between groups %s and %s: %s", 
+                            var, pair[1], pair[2], e$message))
+            })
+          } else {
+            tryCatch({
+              test <- chisq.test(contingency_table)
+              # Add results
+              test_result <- rbind(test_result, 
+                                 data.frame(group1 = pair[1],
+                                          group2 = pair[2],
+                                          p = test$p.value,
+                                          stringsAsFactors = FALSE))
+            }, error = function(e) {
+              warning(sprintf("Chi-square test failed for %s between groups %s and %s: %s", 
+                            var, pair[1], pair[2], e$message))
+            })
+          }
         } else {
-          test <- chisq.test(contingency_table)
+          warning(sprintf("Skipping test for %s between groups %s and %s: insufficient data categories", 
+                         var, pair[1], pair[2]))
         }
-        
-        # Add results
-        test_result <- rbind(test_result, 
-                           data.frame(group1 = pair[1],
-                                    group2 = pair[2],
-                                    p = test$p.value))
-      }
-      
-      # Adjust p-values if needed
-      if(p_adjust_method != "none") {
-        test_result$p <- p.adjust(test_result$p, method = p_adjust_method)
       }
     }
     
     # Format results
-    if(nrow(test_result) > 0) {
+    if (exists("test_result") && nrow(test_result) > 0) {
+      # Create a result_row with all possible group pairs
       result_row <- data.frame(
         id = row_counter,
-        Factor = var
+        Factor = var,
+        stringsAsFactors = FALSE
       )
       
-      # Add p-values as columns
-      for(i in 1:nrow(test_result)) {
-        col_name <- paste0(test_result$group1[i], " - ", test_result$group2[i])
-        result_row[[col_name]] <- test_result$p[i]
+      # Add p-values for each group pair
+      p_values <- numeric()
+      for (pair_name in pair_names) {
+        pair_groups <- unlist(strsplit(pair_name, " - "))
+        p_value <- test_result$p[test_result$group1 == pair_groups[1] & 
+                                  test_result$group2 == pair_groups[2]]
+        if (length(p_value) == 0) {
+          p_value <- test_result$p[test_result$group1 == pair_groups[2] & 
+                                    test_result$group2 == pair_groups[1]]
+        }
+        p_values <- c(p_values, p_value)
+        result_row[[pair_name]] <- p_value
+      }
+      
+      # Adjust p-values if needed
+      if (p_adjust_method != "none") {
+        adjusted_p_values <- p.adjust(p_values, method = p_adjust_method)
+        for (i in seq_along(pair_names)) {
+          result_row[[pair_names[i]]] <- adjusted_p_values[i]
+        }
       }
       
       results_list[[length(results_list) + 1]] <- result_row
@@ -848,7 +848,7 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
   }
   
   # Combine all results
-  if(length(results_list) > 0) {
+  if (length(results_list) > 0) {
     final_results <- do.call(rbind, results_list)
     rownames(final_results) <- NULL
     return(final_results)
