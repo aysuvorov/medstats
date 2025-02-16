@@ -571,7 +571,11 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
       # Check normality using Shapiro test
       is_normal <- all(sapply(groups, function(g) {
         subset_data <- df[[var]][df[[group_var]] == g]
-        shapiro.test(subset_data)$p.value > 0.05
+        if (length(unique(subset_data)) < 3) {
+          FALSE  # Если все значения равны, данные не нормальны
+        } else {
+          shapiro.test(subset_data)$p.value > 0.05
+        }
       }))
       
       # Calculate summary statistics
@@ -603,14 +607,27 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
           test_name <- "Тест Вилкоксона"
         }
       } else {
-        if(is_normal) {
-          test_result <- anova_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "Однофакторный дисперсионный анализ"
+        # Check if all values are in one group BEFORE running the test
+        group_counts <- table(df[[group_var]])
+        if (any(group_counts <= 1)) { # Modified condition to handle all groups having one or fewer observations
+          p_value <- NA
+          test_name <- "Невозможно выполнить тест: недостаточно наблюдений в группах"
         } else {
-          test_result <- kruskal_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "Тест Краскела-Уоллиса"
+          if(is_normal) {
+            test_result <- anova_test(df, as.formula(paste(var, "~", group_var)))
+            p_value <- test_result$p
+            test_name <- "Однофакторный дисперсионный анализ"
+          } else {
+            tryCatch({
+              test_result <- kruskal_test(df, as.formula(paste(var, "~", group_var)))
+              p_value <- test_result$p
+              test_name <- "Тест Краскела-Уоллиса"
+            }, error = function(e) {
+              p_value <- NA
+              test_name <- "Ошибка (возможно, все значения в одной группе)"
+              # Optionally, print the error message:  print(e)
+            })
+          }
         }
       }
       
@@ -659,15 +676,22 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
       # Create contingency table
       cont_table <- table(df[[var]], df[[group_var]], useNA = "no")
       
-      # Perform chi-square or Fisher's exact test
-      if(any(cont_table < 5)) {
+    if (any(rowSums(cont_table) == 0) || any(colSums(cont_table) == 0)) {
+    # Если есть строки или столбцы с нулями, пропустить тест
+    test_name <- "Невозможно выполнить тест (нулевые строки/столбцы)"
+    p_value <- NA
+    } else {
+    # Perform chi-square or Fisher's exact test
+    if (any(cont_table < 5)) {
         test_result <- fisher.test(cont_table, simulate.p.value = TRUE)
         test_name <- "Точный тест Фишера"
-      } else {
+        p_value <- test_result$p.value
+    } else {
         test_result <- chisq.test(cont_table)
         test_name <- "Хи-квадрат тест"
-      }
-      p_value <- test_result$p.value
+        p_value <- test_result$p.value
+    }
+    }
       
       # Create rows for each category
       for(level in var_levels) {
@@ -737,23 +761,39 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
     
     if (is.numeric(data[[var]])) {
       # Check normality using Shapiro-Wilk test
-      shapiro_test <- shapiro.test(data[[var]])
-      is_normal <- shapiro_test$p.value > 0.05
+      shapiro_test <- tryCatch({
+        shapiro.test(data[[var]])
+      }, error = function(e) {
+        warning(sprintf("Shapiro-Wilk test failed for %s: %s", var, e$message))
+        list(p.value = NA)
+      })
+      
+      is_normal <- !is.na(shapiro_test$p.value) && shapiro_test$p.value > 0.05
       
       if (is_normal) {
         # Pairwise t-test for normal data
-        test_result <- data %>%
-          rstatix::pairwise_t_test(
-            as.formula(paste(var, "~", group_var)),
-            p.adjust.method = "none"  # Changed to "none"
-          )
+        test_result <- tryCatch({
+          data %>%
+            rstatix::pairwise_t_test(
+              as.formula(paste(var, "~", group_var)),
+              p.adjust.method = "none"  # Changed to "none"
+            )
+        }, error = function(e) {
+          warning(sprintf("Pairwise t-test failed for %s: %s", var, e$message))
+          NULL
+        })
       } else {
         # Pairwise Wilcoxon test for non-normal data
-        test_result <- data %>%
-          rstatix::pairwise_wilcox_test(
-            as.formula(paste(var, "~", group_var)),
-            p.adjust.method = "none"  # Changed to "none"
-          )
+        test_result <- tryCatch({
+          data %>%
+            rstatix::pairwise_wilcox_test(
+              as.formula(paste(var, "~", group_var)),
+              p.adjust.method = "none"  # Changed to "none"
+            )
+        }, error = function(e) {
+          warning(sprintf("Pairwise Wilcoxon test failed for %s: %s", var, e$message))
+          NULL
+        })
       }
       
     } else if (is.factor(data[[var]]) || is.character(data[[var]])) {
@@ -812,7 +852,7 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
     }
     
     # Format results
-    if (exists("test_result") && nrow(test_result) > 0) {
+    if (exists("test_result") && !is.null(test_result) && nrow(test_result) > 0) {
       # Create a result_row with all possible group pairs
       result_row <- data.frame(
         id = row_counter,
@@ -830,15 +870,15 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
           p_value <- test_result$p[test_result$group1 == pair_groups[2] & 
                                     test_result$group2 == pair_groups[1]]
         }
-        p_values <- c(p_values, p_value)
-        result_row[[pair_name]] <- p_value
+        p_values <- c(p_values, ifelse(is.na(p_value), NA, p_value))
+        result_row[[pair_name]] <- ifelse(is.na(p_value), NA, p_value)
       }
       
       # Adjust p-values if needed
       if (p_adjust_method != "none") {
         adjusted_p_values <- p.adjust(p_values, method = p_adjust_method)
         for (i in seq_along(pair_names)) {
-          result_row[[pair_names[i]]] <- adjusted_p_values[i]
+          result_row[[pair_names[i]]] <- ifelse(is.na(adjusted_p_values[i]), NA, adjusted_p_values[i])
         }
       }
       
@@ -856,6 +896,7 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
     return(data.frame())
   }
 }
+
 
 # +-----------------------------------------------------------------------------
 # +-----------------------------------------------------------------------------
@@ -1268,6 +1309,76 @@ log_covariate = \(dataframe, y_var, covariates) {
 }
 
 # +-----------------------------------------------------------------------------
+
+# Однофакторный регрессионный анализ по Коксу
+
+cox_uni = function(data, time_var, event_var) {
+  
+  tab = data.frame()
+  
+  for (col in colnames(data)) {
+    if (!(col %in% c(time_var, event_var))) {
+      
+      tryCatch(
+        {mod = coxph(as.formula(paste("Surv(", time_var, ",", event_var, ") ~ .")), 
+                     data[c(time_var, event_var, col)])},
+        error = function(e) {mod = list('g', 'h')})
+      
+      if (class(mod)[1] == "coxph") {
+        
+        f = tryCatch({f = confint(mod)[1,]},
+                     error = function(e) {f = c(NA, NA)})
+        
+        res = tryCatch(
+          {res = cbind(tidy(mod)[1,], cbind(ci.l = f[1], 
+                                            ci.h = f[2])) %>%
+            mutate(HR = exp(estimate),
+                   lower = exp(ci.l),
+                   upper = exp(ci.h)) %>% 
+            select(term, HR, lower, upper, p.value) %>%
+            filter(term != '(Intercept)')}, 
+          error = function(e) {res = cbind.data.frame(term=col, 
+                                                      HR=NA, lower=NA, upper=NA, p.value=NA)})
+        
+      } else {
+        res = cbind.data.frame(term=col, HR=NA, lower=NA, upper=NA, p.value=NA)
+      }
+      
+      tab = rbind(tab, res)
+    }
+  }
+  
+  tab %<>% mutate(
+    HR = round(HR, 2),
+    lower = round(lower, 2),
+    upper = round(upper, 2),
+    p.value = round(p.value, 3)
+    
+  )
+  
+  rownames(tab) = seq(dim(tab)[1])
+  colnames(tab) = c('Фактор', 'HR', 'lower_CI', 'upper_CI', 'p.value')
+  tab$`Индекс` = as.numeric(rownames(tab))
+  tab %>% mutate(HR = round(HR, 2),
+                 lower_CI = round(lower_CI, 2),
+                 upper_CI = round(upper_CI, 2))
+  
+  # Бинарные факторы в таблице автоматически получают суффикс "1", т.к. 1-я категория оценивается. 
+  # Ниже убираем единицы из названий факторов
+  
+  var_names = tab$`Фактор`
+  for (i in seq(length(var_names))) {
+    s = var_names[i]
+    if (str_sub(s,-1) == "1") {
+        s = substring(s,1, nchar(s)-1)
+    }
+    var_names[i] = s
+  }
+  tab$`Фактор` = var_names
+  
+  return(tab[c('Индекс','Фактор', 'HR', 'lower_CI', 'upper_CI', 'p.value')])
+}
+
 # Регрессия Кокса с ковариатами
 
 cox_covariate = function(data, time, status, covariates) {
