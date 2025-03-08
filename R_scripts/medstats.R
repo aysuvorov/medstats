@@ -819,7 +819,7 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
         if (nrow(contingency_table) >= 2 && ncol(contingency_table) >= 2) {
           if (any(contingency_table < 5)) {
             tryCatch({
-              test <- fisher.test(contingency_table)
+              test <- fisher.test(contingency_table, simulate.p.value=TRUE)
               # Add results
               test_result <- rbind(test_result, 
                                  data.frame(group1 = pair[1],
