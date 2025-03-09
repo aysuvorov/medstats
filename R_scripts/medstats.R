@@ -865,13 +865,14 @@ pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
       for (pair_name in pair_names) {
         pair_groups <- unlist(strsplit(pair_name, " - "))
         p_value <- test_result$p[test_result$group1 == pair_groups[1] & 
-                                  test_result$group2 == pair_groups[2]]
+                  test_result$group2 == pair_groups[2]]
         if (length(p_value) == 0) {
           p_value <- test_result$p[test_result$group1 == pair_groups[2] & 
-                                    test_result$group2 == pair_groups[1]]
+                                  test_result$group2 == pair_groups[1]]
         }
-        p_values <- c(p_values, ifelse(is.na(p_value), NA, p_value))
-        result_row[[pair_name]] <- ifelse(is.na(p_value), NA, p_value)
+        p_value <- if (length(p_value) == 0) NA else p_value  # Handle empty p_value
+        p_values <- c(p_values, p_value)
+        result_row[[pair_name]] <- p_value
       }
       
       # Adjust p-values if needed
