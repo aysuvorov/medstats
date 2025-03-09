@@ -569,12 +569,30 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
       # For numeric variables
       
       # Check normality using Shapiro test
+      # is_normal <- all(sapply(groups, function(g) {
+      #   subset_data <- df[[var]][df[[group_var]] == g]
+      #   if (length(unique(subset_data)) < 3) {
+      #     FALSE  # Если все значения равны, данные не нормальны
+      #   } else {
+      #     shapiro.test(subset_data)$p.value > 0.05
+      #   }
+      # }))
+
       is_normal <- all(sapply(groups, function(g) {
         subset_data <- df[[var]][df[[group_var]] == g]
-        if (length(unique(subset_data)) < 3) {
-          FALSE  # Если все значения равны, данные не нормальны
+        
+        # Check if sample size is valid for Shapiro test
+        if (length(subset_data) < 3 || length(subset_data) > 5000) {
+          FALSE  # If sample size is invalid, assume data is not normal
+        } else if (length(unique(subset_data)) < 3) {
+          FALSE  # If all values are identical, data is not normal
         } else {
-          shapiro.test(subset_data)$p.value > 0.05
+          # Attempt Shapiro test; return FALSE if an error occurs
+          tryCatch({
+            shapiro.test(subset_data)$p.value > 0.05
+          }, error = function(e) {
+            FALSE  # Return FALSE if Shapiro test fails
+          })
         }
       }))
       
