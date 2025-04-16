@@ -700,14 +700,40 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
     p_value <- NA
     } else {
     # Perform chi-square or Fisher's exact test
-    if (any(cont_table < 5)) {
-        test_result <- fisher.test(cont_table, simulate.p.value = TRUE)
-        test_name <- "Точный тест Фишера"
-        p_value <- test_result$p.value
+    if (nrow(cont_table) < 2 || ncol(cont_table) < 2) {
+        # Not enough dimensions for either test
+        test_name <- "Недостаточно данных для теста"
+        p_value <- NA
+    } else if (any(cont_table < 5)) {
+        # Use Fisher's exact test if any expected count is <5
+        test_result <- tryCatch({
+            fisher.test(cont_table, simulate.p.value = TRUE)
+        }, error = function(e) {
+            NULL
+        })
+        
+        if (is.null(test_result)) {
+            test_name <- "Тест не может быть выполнен"
+            p_value <- NA
+        } else {
+            test_name <- "Точный тест Фишера"
+            p_value <- test_result$p.value
+        }
     } else {
-        test_result <- chisq.test(cont_table)
-        test_name <- "Хи-квадрат тест"
-        p_value <- test_result$p.value
+        # Use chi-square test otherwise
+        test_result <- tryCatch({
+            chisq.test(cont_table)
+        }, error = function(e) {
+            NULL
+        })
+        
+        if (is.null(test_result)) {
+            test_name <- "Тест не может быть выполнен"
+            p_value <- NA
+        } else {
+            test_name <- "Хи-квадрат тест"
+            p_value <- test_result$p.value
+        }
     }
     }
       
