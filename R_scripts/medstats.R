@@ -540,130 +540,114 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
   if(is.null(groups)) groups <- unique(df[[group_var]]) 
   n_groups <- length(groups)
   
-  # Create format strings based on digits parameter
+  # Create format strings
   mean_format <- paste0("%.", digits, "f ± %.", digits, "f")
   median_format <- paste0("%.", digits, "f [%.", digits, "f, %.", digits, "f]")
   minmax_format <- paste0("(%.", digits, "f; %.", digits, "f)")
   
-  # Initialize results dataframe
+  # Initialize results
   results <- data.frame()
   row_id <- 1
   
-  # Function to check if a string starts with a number
-  starts_with_number <- function(x) {
-    grepl("^[0-9]", x)
-  }
-
-  orig_col_names = names(df)
-
-  for (i in seq(length(names(df)))) {
-    if (starts_with_number(names(df)[i]) == TRUE) {
-      names(df)[i] = paste0("firstnum_", names(df)[i])
+  # Handle column names starting with numbers
+  starts_with_number <- function(x) grepl("^[0-9]", x)
+  orig_col_names <- names(df)
+  
+  for (i in seq_along(names(df))) {
+    if (starts_with_number(names(df)[i])) {
+      names(df)[i] <- paste0("firstnum_", names(df)[i])
     }
   }
   
-  # Process each variable in the dataframe
+  # Process each variable
   for(var in names(df)[!names(df) %in% group_var]) {
-       
     if(is.numeric(df[[var]])) {
-      # For numeric variables
-      
-      # Check normality using Shapiro test
-      # is_normal <- all(sapply(groups, function(g) {
-      #   subset_data <- df[[var]][df[[group_var]] == g]
-      #   if (length(unique(subset_data)) < 3) {
-      #     FALSE  # Если все значения равны, данные не нормальны
-      #   } else {
-      #     shapiro.test(subset_data)$p.value > 0.05
-      #   }
-      # }))
-
+      # Normality check
       is_normal <- all(sapply(groups, function(g) {
         subset_data <- df[[var]][df[[group_var]] == g]
-        
-        # Check if sample size is valid for Shapiro test
         if (length(subset_data) < 3 || length(subset_data) > 5000) {
-          FALSE  # If sample size is invalid, assume data is not normal
+          FALSE
         } else if (length(unique(subset_data)) < 3) {
-          FALSE  # If all values are identical, data is not normal
+          FALSE
         } else {
-          # Attempt Shapiro test; return FALSE if an error occurs
-          tryCatch({
-            shapiro.test(subset_data)$p.value > 0.05
-          }, error = function(e) {
-            FALSE  # Return FALSE if Shapiro test fails
-          })
+          tryCatch(
+            shapiro.test(subset_data)$p.value > 0.05,
+            error = function(e) FALSE
+          )
         }
       }))
       
-      # Calculate summary statistics
+      # Summary statistics
       summary_stats <- df %>%
         group_by(!!sym(group_var)) %>%
         summarise(
-          mean_sd = sprintf(mean_format, 
-                          mean(!!sym(var), na.rm = TRUE), 
-                          sd(!!sym(var), na.rm = TRUE)),
-          median_iqr = sprintf(median_format, 
-                             median(!!sym(var), na.rm = TRUE),
-                             quantile(!!sym(var), 0.25, na.rm = TRUE),
-                             quantile(!!sym(var), 0.75, na.rm = TRUE)),
-          minmax = sprintf(minmax_format,
-                         min(!!sym(var), na.rm = TRUE),
-                         max(!!sym(var), na.rm = TRUE)),
+          mean_sd = sprintf(mean_format, mean(!!sym(var), na.rm = TRUE), 
+                       sd(!!sym(var), na.rm = TRUE)),
+          median_iqr = sprintf(median_format, median(!!sym(var), na.rm = TRUE),
+                              quantile(!!sym(var), 0.25, na.rm = TRUE),
+                              quantile(!!sym(var), 0.75, na.rm = TRUE)),
+          minmax = if(add_minmax) sprintf(minmax_format,
+                               min(!!sym(var), na.rm = TRUE),
+                               max(!!sym(var), na.rm = TRUE)) else NA,
           N = sum(!is.na(!!sym(var)))
         )
       
-      # Perform statistical test and determine test name
+      # Statistical tests
       if(n_groups == 2) {
-        if(is_normal) {
-          test_result <- t_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "t-тест Стьюдента"
+        group_data <- split(df[[var]], df[[group_var]])
+        valid_groups <- sapply(group_data, function(x) length(unique(na.omit(x))) > 1)
+        
+        if (all(valid_groups)) {
+          if (is_normal) {
+            test_result <- tryCatch(
+              t.test(df[[var]] ~ df[[group_var]]),
+              error = function(e) list(p.value = NA)
+            )
+          } else {
+            test_result <- tryCatch(
+              wilcox.test(df[[var]] ~ df[[group_var]]),
+              error = function(e) list(p.value = NA)
+            )
+          }
+          p_value <- test_result$p.value
+          test_name <- ifelse(is_normal, "t-тест Стьюдента", "Тест Вилкоксона")
         } else {
-          test_result <- wilcox_test(df, as.formula(paste(var, "~", group_var)))
-          p_value <- test_result$p
-          test_name <- "Тест Вилкоксона"
+          p_value <- NA
+          test_name <- "Недостаточно данных (нулевая дисперсия в группе)"
         }
       } else {
-        # Check if all values are in one group BEFORE running the test
         group_counts <- table(df[[group_var]])
-        if (any(group_counts <= 1)) { # Modified condition to handle all groups having one or fewer observations
+        if (any(group_counts <= 1)) {
           p_value <- NA
           test_name <- "Невозможно выполнить тест: недостаточно наблюдений в группах"
         } else {
-          if(is_normal) {
-            test_result <- anova_test(df, as.formula(paste(var, "~", group_var)))
-            p_value <- test_result$p
-            test_name <- "Однофакторный дисперсионный анализ"
+          if (is_normal) {
+            test_result <- tryCatch(
+              oneway.test(df[[var]] ~ df[[group_var]]),
+              error = function(e) list(p.value = NA)
+            )
           } else {
-            tryCatch({
-              test_result <- kruskal_test(df, as.formula(paste(var, "~", group_var)))
-              p_value <- test_result$p
-              test_name <- "Тест Краскела-Уоллиса"
-            }, error = function(e) {
-              p_value <- NA
-              test_name <- "Ошибка (возможно, все значения в одной группе)"
-              # Optionally, print the error message:  print(e)
-            })
+            test_result <- tryCatch(
+              kruskal.test(df[[var]] ~ df[[group_var]]),
+              error = function(e) list(p.value = NA)
+            )
           }
+          p_value <- ifelse(is.null(test_result$p.value), NA, test_result$p.value)
+          test_name <- ifelse(is_normal, "ANOVA", "Тест Краскела-Уоллиса")
         }
       }
       
-      # Determine number of rows needed
+      # Create result rows
       n_rows <- if(add_minmax) 3 else 2
-      
-      # Create base rows
       base_row <- data.frame(
         id = row_id:(row_id + n_rows - 1),
         Фактор = c(var, rep("", n_rows - 1)),
-        Статистика = c("среднее ± СО", 
-                      "медиана [25%; 75%]",
+        Статистика = c("среднее ± СО", "медиана [25%; 75%]",
                       if(add_minmax) "Мин - Макс" else NULL),
         test_used = c(test_name, rep("", n_rows - 1)),
         p_value = c(sprintf("%.3f", p_value), rep("", n_rows - 1))
       )
       
-      # Add group values and N's
       for(i in seq_along(groups)) {
         base_row[[groups[i]]] <- c(
           summary_stats$mean_sd[i],
@@ -763,15 +747,9 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
 
  
   # Reorder columns
-  col_order <- c("id", "Фактор", "Статистика")
-  col_order <- c(col_order, groups)
-  col_order <- c(col_order, paste0("n", 1:n_groups))
-  col_order <- c(col_order, "test_used", "p_value")
-
-  # Remove prefix "firstnum_" in colnames
-  names(df) = orig_col_names
-  
-  # Rename final columns
+  col_order <- c("id", "Фактор", "Статистика", groups, 
+                paste0("n", 1:n_groups), "test_used", "p_value")
+  names(df) <- orig_col_names
   results <- results[, col_order]
   results[['Фактор']] <- gsub("firstnum_", "", results[['Фактор']])
   names(results)[names(results) == "test_used"] <- "Статистический тест"
@@ -779,6 +757,252 @@ compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
   
   return(results)
 }
+
+# compare_all <- function(df, group_var, digits = 1, add_minmax = FALSE) {
+#   # Get unique groups in the original order
+#   groups <- levels(df[[group_var]]) 
+#   if(is.null(groups)) groups <- unique(df[[group_var]]) 
+#   n_groups <- length(groups)
+  
+#   # Create format strings based on digits parameter
+#   mean_format <- paste0("%.", digits, "f ± %.", digits, "f")
+#   median_format <- paste0("%.", digits, "f [%.", digits, "f, %.", digits, "f]")
+#   minmax_format <- paste0("(%.", digits, "f; %.", digits, "f)")
+  
+#   # Initialize results dataframe
+#   results <- data.frame()
+#   row_id <- 1
+  
+#   # Function to check if a string starts with a number
+#   starts_with_number <- function(x) {
+#     grepl("^[0-9]", x)
+#   }
+
+#   orig_col_names = names(df)
+
+#   for (i in seq(length(names(df)))) {
+#     if (starts_with_number(names(df)[i]) == TRUE) {
+#       names(df)[i] = paste0("firstnum_", names(df)[i])
+#     }
+#   }
+  
+#   # Process each variable in the dataframe
+#   for(var in names(df)[!names(df) %in% group_var]) {
+       
+#     if(is.numeric(df[[var]])) {
+#       # For numeric variables
+      
+#       # Check normality using Shapiro test
+#       # is_normal <- all(sapply(groups, function(g) {
+#       #   subset_data <- df[[var]][df[[group_var]] == g]
+#       #   if (length(unique(subset_data)) < 3) {
+#       #     FALSE  # Если все значения равны, данные не нормальны
+#       #   } else {
+#       #     shapiro.test(subset_data)$p.value > 0.05
+#       #   }
+#       # }))
+
+#       is_normal <- all(sapply(groups, function(g) {
+#         subset_data <- df[[var]][df[[group_var]] == g]
+        
+#         # Check if sample size is valid for Shapiro test
+#         if (length(subset_data) < 3 || length(subset_data) > 5000) {
+#           FALSE  # If sample size is invalid, assume data is not normal
+#         } else if (length(unique(subset_data)) < 3) {
+#           FALSE  # If all values are identical, data is not normal
+#         } else {
+#           # Attempt Shapiro test; return FALSE if an error occurs
+#           tryCatch({
+#             shapiro.test(subset_data)$p.value > 0.05
+#           }, error = function(e) {
+#             FALSE  # Return FALSE if Shapiro test fails
+#           })
+#         }
+#       }))
+      
+#       # Calculate summary statistics
+#       summary_stats <- df %>%
+#         group_by(!!sym(group_var)) %>%
+#         summarise(
+#           mean_sd = sprintf(mean_format, 
+#                           mean(!!sym(var), na.rm = TRUE), 
+#                           sd(!!sym(var), na.rm = TRUE)),
+#           median_iqr = sprintf(median_format, 
+#                              median(!!sym(var), na.rm = TRUE),
+#                              quantile(!!sym(var), 0.25, na.rm = TRUE),
+#                              quantile(!!sym(var), 0.75, na.rm = TRUE)),
+#           minmax = sprintf(minmax_format,
+#                          min(!!sym(var), na.rm = TRUE),
+#                          max(!!sym(var), na.rm = TRUE)),
+#           N = sum(!is.na(!!sym(var)))
+#         )
+      
+#       # Perform statistical test and determine test name
+#       if(n_groups == 2) {
+#         if(is_normal) {
+#           test_result <- t_test(df, as.formula(paste(var, "~", group_var)))
+#           p_value <- test_result$p
+#           test_name <- "t-тест Стьюдента"
+#         } else {
+#           test_result <- wilcox_test(df, as.formula(paste(var, "~", group_var)))
+#           p_value <- test_result$p
+#           test_name <- "Тест Вилкоксона"
+#         }
+#       } else {
+#         # Check if all values are in one group BEFORE running the test
+#         group_counts <- table(df[[group_var]])
+#         if (any(group_counts <= 1)) { # Modified condition to handle all groups having one or fewer observations
+#           p_value <- NA
+#           test_name <- "Невозможно выполнить тест: недостаточно наблюдений в группах"
+#         } else {
+#           if(is_normal) {
+#             test_result <- anova_test(df, as.formula(paste(var, "~", group_var)))
+#             p_value <- test_result$p
+#             test_name <- "Однофакторный дисперсионный анализ"
+#           } else {
+#             tryCatch({
+#               test_result <- kruskal_test(df, as.formula(paste(var, "~", group_var)))
+#               p_value <- test_result$p
+#               test_name <- "Тест Краскела-Уоллиса"
+#             }, error = function(e) {
+#               p_value <- NA
+#               test_name <- "Ошибка (возможно, все значения в одной группе)"
+#               # Optionally, print the error message:  print(e)
+#             })
+#           }
+#         }
+#       }
+      
+#       # Determine number of rows needed
+#       n_rows <- if(add_minmax) 3 else 2
+      
+#       # Create base rows
+#       base_row <- data.frame(
+#         id = row_id:(row_id + n_rows - 1),
+#         Фактор = c(var, rep("", n_rows - 1)),
+#         Статистика = c("среднее ± СО", 
+#                       "медиана [25%; 75%]",
+#                       if(add_minmax) "Мин - Макс" else NULL),
+#         test_used = c(test_name, rep("", n_rows - 1)),
+#         p_value = c(sprintf("%.3f", p_value), rep("", n_rows - 1))
+#       )
+      
+#       # Add group values and N's
+#       for(i in seq_along(groups)) {
+#         base_row[[groups[i]]] <- c(
+#           summary_stats$mean_sd[i],
+#           summary_stats$median_iqr[i],
+#           if(add_minmax) summary_stats$minmax[i] else NULL
+#         )
+#         base_row[[paste0("n", i)]] <- summary_stats$N[i]
+#       }
+      
+#       results <- rbind(results, base_row)
+#       row_id <- row_id + n_rows
+      
+#     } else if(is.factor(df[[var]])) {
+#       # For factor variables
+      
+#       # Get factor levels
+#       var_levels <- levels(df[[var]])
+#       if(is.null(var_levels)) var_levels <- unique(df[[var]][!is.na(df[[var]])])
+      
+#       # Calculate frequencies and percentages for each category in each group
+#       summary_stats <- df %>%
+#         group_by(!!sym(group_var)) %>%
+#         summarise(
+#           valid_n = sum(!is.na(!!sym(var))),
+#           .groups = "drop"
+#         )
+      
+#       # Create contingency table
+#       cont_table <- table(df[[var]], df[[group_var]], useNA = "no")
+      
+#     if (any(rowSums(cont_table) == 0) || any(colSums(cont_table) == 0)) {
+#     # Если есть строки или столбцы с нулями, пропустить тест
+#     test_name <- "Невозможно выполнить тест (нулевые строки/столбцы)"
+#     p_value <- NA
+#     } else {
+#     # Perform chi-square or Fisher's exact test
+#     if (nrow(cont_table) < 2 || ncol(cont_table) < 2) {
+#         # Not enough dimensions for either test
+#         test_name <- "Недостаточно данных для теста"
+#         p_value <- NA
+#     } else if (any(cont_table < 5)) {
+#         # Use Fisher's exact test if any expected count is <5
+#         test_result <- tryCatch({
+#             fisher.test(cont_table, simulate.p.value = TRUE)
+#         }, error = function(e) {
+#             NULL
+#         })
+        
+#         if (is.null(test_result)) {
+#             test_name <- "Тест не может быть выполнен"
+#             p_value <- NA
+#         } else {
+#             test_name <- "Точный тест Фишера"
+#             p_value <- test_result$p.value
+#         }
+#     } else {
+#         # Use chi-square test otherwise
+#         test_result <- tryCatch({
+#             chisq.test(cont_table)
+#         }, error = function(e) {
+#             NULL
+#         })
+        
+#         if (is.null(test_result)) {
+#             test_name <- "Тест не может быть выполнен"
+#             p_value <- NA
+#         } else {
+#             test_name <- "Хи-квадрат тест"
+#             p_value <- test_result$p.value
+#         }
+#     }
+#     }
+      
+#       # Create rows for each category
+#       for(level in var_levels) {
+#         base_row <- data.frame(
+#           id = row_id,
+#           Фактор = ifelse(level == var_levels[1], var, ""),
+#           Статистика = level,
+#           test_used = ifelse(level == var_levels[1], test_name, ""),
+#           p_value = ifelse(level == var_levels[1], sprintf("%.3f", p_value), "")
+#         )
+        
+#         # Calculate n and % for each group
+#         for(i in seq_along(groups)) {
+#           n_category <- sum(df[[var]] == level & df[[group_var]] == groups[i], na.rm = TRUE)
+#           pct <- 100 * n_category / summary_stats$valid_n[i]
+#           base_row[[groups[i]]] <- sprintf("%d (%.1f%%)", n_category, pct)
+#           base_row[[paste0("n", i)]] <- summary_stats$valid_n[i]
+#         }
+        
+#         results <- rbind(results, base_row)
+#         row_id <- row_id + 1
+#       }
+#     }
+#   }
+
+ 
+#   # Reorder columns
+#   col_order <- c("id", "Фактор", "Статистика")
+#   col_order <- c(col_order, groups)
+#   col_order <- c(col_order, paste0("n", 1:n_groups))
+#   col_order <- c(col_order, "test_used", "p_value")
+
+#   # Remove prefix "firstnum_" in colnames
+#   names(df) = orig_col_names
+  
+#   # Rename final columns
+#   results <- results[, col_order]
+#   results[['Фактор']] <- gsub("firstnum_", "", results[['Фактор']])
+#   names(results)[names(results) == "test_used"] <- "Статистический тест"
+#   names(results)[names(results) == "p_value"] <- "Значимость, р"
+  
+#   return(results)
+# }
 
 
 pairwise_comparisons <- function(data, group_var, p_adjust_method = "none") {
