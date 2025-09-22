@@ -2,8 +2,8 @@
 
 **Authors / Авторы**: 
 
-- **`Suvorov Aleksandr Yu.`** - Senior biostatistician in Research Services Department of Sechenov Univercity
-- **`Vergun Maria A.`** - biostatistician in Research Services Department of Sechenov Univercity
+- [**`Suvorov Aleksandr Yu.`**](https://orcid.org/my-orcid?orcid=0000-0002-2224-0019#:~:text=https%3A//orcid.org,0002%2D2224%2D0019) - Senior biostatistician in Research Services Department of Sechenov University
+- [**`Vergun Maria A.`**](https://orcid.org/0009-0000-4547-0143) - biostatistician in Research Services Department of Sechenov University
 
 Collection of scripts and modules for biostatistics and data science simple automation for research process.
 Module uses `rpy2`-module and basic `R` libraries.
