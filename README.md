@@ -5,7 +5,7 @@
 - [**`Suvorov Aleksandr Yu.`**](https://orcid.org/my-orcid?orcid=0000-0002-2224-0019#:~:text=https%3A//orcid.org,0002%2D2224%2D0019) - Senior biostatistician in Research Services Department of Sechenov University
 - [**`Vergun Maria A.`**](https://orcid.org/0009-0000-4547-0143) - biostatistician in Research Services Department of Sechenov University
 
-[!](https://psv4.userapi.com/s/v1/d2/ShD3_OkFpLG4oTPXw6jPOxafOE4_8CGOwRPmwe8iQM0r3XvRMn1sxYW6LGF2QWWCkjJbH8orqmZmWksV3eZtGeF3Bg7uDkHUdXY85uCImveVU3keUsWYxHlBWx7nziFi0ncpNPZW77FL/Snimok_ekrana_ot_2025-09-23_00-41-33.png)
+[](https://psv4.userapi.com/s/v1/d2/ShD3_OkFpLG4oTPXw6jPOxafOE4_8CGOwRPmwe8iQM0r3XvRMn1sxYW6LGF2QWWCkjJbH8orqmZmWksV3eZtGeF3Bg7uDkHUdXY85uCImveVU3keUsWYxHlBWx7nziFi0ncpNPZW77FL/Snimok_ekrana_ot_2025-09-23_00-41-33.png)
 
 Collection of scripts and modules for biostatistics and data science simple automation for research process.
 Module uses `rpy2`-module and basic `R` libraries.
