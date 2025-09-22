@@ -1,82 +1,131 @@
 
+# Core Libraries
 import numpy as np
 import pandas as pd
-import scipy.stats as st
-from seaborn import palettes
-#import statsmodels as sm
-#import statsmodels.api as sma
 import matplotlib.pyplot as plt
 import seaborn as sns
-import rpy2
-#import statsmodels.stats.api as sms
+from typing import List
 
-from unicodedata import normalize
-from scipy.stats.stats import ttest_ind
+# Scientific Computing and Statistics
+from scipy import stats
+from scipy.stats import (
+    norm, t as t_dist, nct, ttest_ind, shapiro, kstest, mannwhitneyu,
+    fisher_exact, chi2_contingency, kruskal, wilcoxon, f_oneway
+)
+from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.stats.proportion import proportion_confint
-from scipy.stats import shapiro, kstest, ttest_ind, ttest_rel, mannwhitneyu, fisher_exact, chi2_contingency, kruskal, wilcoxon, f_oneway
-from pandas.api.types import CategoricalDtype
-from lifelines import KaplanMeierFitter, CoxPHFitter
-#from statsmodels.tools.sm_exceptions import PerfectSeparationError
-#from statsmodels.formula.api import ols, logit, mixedlm, gee, poisson
-#from numpy.linalg import LinAlgError
-#from lifelines import KaplanMeierFitter
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
 
-cph = CoxPHFitter()
+# Machine Learning Preprocessing
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.utils import Bunch
 
-## Rpy2 env
+# Optimization (Root Finding)
+from scipy.optimize import brentq
+
+# Plotting Enhancements
+from matplotlib.patches import Patch
+from matplotlib.colors import ListedColormap
+
+# Unicode Handling
+from unicodedata import normalize
+
+# Missing Values Visualization
+import missingno as msno
+
+# Itertools Combinatorial Generators
+from itertools import product, combinations
+
+# R Integration via rpy2
 import rpy2.robjects as ro
-
 from rpy2.robjects.packages import importr
-#from rpy2.robjects.conversion import localconverter
-#env = ro.r.globalenv()
-
-from rpy2.robjects import pandas2ri, FloatVector, IntVector, FactorVector, Formula 
-
+from rpy2.robjects import pandas2ri, FloatVector, IntVector, FactorVector, Formula
 import rpy2.robjects.numpy2ri as rpyn
 rpyn.activate()
-
-stats = importr('stats')
+stats_r = importr('stats')
 base = importr('base')
 
+# Warning Management
+import warnings
 
-# import sys
-# sys.path.append('/home/guest/Yandex.Disk/GitHub/medstats/src/cxs')
-# from importlib import reload
-# import describe as descr
+# Miscellaneous Mathematical Operations
+from math import ceil
 
-# import warnings
-# warnings.filterwarnings("ignore")
+
+# +-----------------------------------------------------------------------------
+# Constants
+
+RS = 1000
 
 # +-----------------------------------------------------------------------------
 # +-----------------------------------------------------------------------------
 
+################################################################################
+# Data cleaners and mess organizers
+################################################################################
 
-"""
-Data cleaners and mess organizers
-"""
+# def columnn_normalizer(df, col_lst):
+#     """
+#     Removing crazy separators in columns
+#     """
+#     for col in col_lst:
+#         for i in range(len(df[col])):
+#             try:
+#                 df[col][i] = normalize('NFKC', df[col][i])
+#                 df[col][i] = df[col][i].replace(',','.')
+#                 try:
+#                     df[col][i] = float(df[col][i])
+#                 except ValueError:
+#                     pass
+#             except TypeError:
+#                 pass
+#         try:
+#             df[col] = df[col].astype(float)
+#         except:
+#             pass
+    
+#     return(df)
 
-def columnn_normalizer(df, col_lst):
+def _norm_string_array(arr):
     """
-    Removing crazy separators in columns
+    Vectorised unicode NFKC normalisation + comma→dot replacement.
+    `arr` is a NumPy array of dtype object that contains strings.
+    """
+    # unicode normalisation (vectorised via np.frompyfunc)
+    ufunc_norm = np.frompyfunc(lambda x: normalize('NFKC', x), 1, 1)
+    arr = ufunc_norm(arr)
+
+    # replace ',' by '.'   (also vectorised)
+    ufunc_rep  = np.frompyfunc(lambda x: x.replace(',', '.'), 1, 1)
+    arr = ufunc_rep(arr)
+
+    return arr
+
+
+def column_normalizer(df, col_lst):
+    """
+    Normalise the text in `col_lst` and cast to float where possible.
+    Modifies the DataFrame in place and also returns it.
     """
     for col in col_lst:
-        for i in range(len(df[col])):
-            try:
-                df[col][i] = normalize('NFKC', df[col][i])
-                df[col][i] = df[col][i].replace(',','.')
-                try:
-                    df[col][i] = float(df[col][i])
-                except ValueError:
-                    pass
-            except TypeError:
-                pass
-        try:
-            df[col] = df[col].astype(float)
-        except:
-            pass
-    
-    return(df)
+        # --- a) ensure we’re working with strings (object dtype) ----------
+        s = df[col].astype(str)
 
+        # --- b) vectorised unicode normalisation + replacement -----------
+        s = pd.Series(_norm_string_array(s.values), index=s.index)
+
+        # --- c) convert to numeric if possible ---------------------------
+        df[col] = pd.to_numeric(s, errors='ignore')
+
+    return df
+
+################################################################################
+# Data frame glimpse and missings analysis
+################################################################################
 
 def glimpse(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -135,45 +184,260 @@ def glimpse(df: pd.DataFrame) -> pd.DataFrame:
         result_df = pd.concat([result_df, new_row.to_frame().T], ignore_index=True)
     
     return result_df
+
+
+def plot_missing_by_combos(df: pd.DataFrame,
+                           cat_cols: list[str] | None = None,
+                           *,
+                           valid_color: str = "#BDBDBD",
+                           na_color: str = "#d62728",
+                           figsize=(9, 4),
+                           title_prefix="Missing map – ",
+                           max_rows_show: int | None = 200,
+                           seed: int | None = 0):
+    """
+    Рисует отдельный heat-map пропусков для каждой уникальной
+    комбинации значений в `cat_cols`
+    (если `cat_cols=None` → один график для всего DF).
+    """
+    cat_cols = [c for c in (cat_cols or []) if c in df.columns]
+    cmap = ListedColormap([valid_color, na_color])
+
+    # ── строим словарь {комбинация: подтаблица} ---------------------------
+    if cat_cols:
+        # Альтернативный подход к группировке
+        combo_series = df[cat_cols].astype(str).agg('/'.join, axis=1)
+        groups = {}
+        for combo in combo_series.unique():
+            mask = combo_series == combo
+            groups[combo] = df.loc[mask].copy()
+    else:
+        groups = {'ALL': df.copy()}
+
+    for combo_id, block in groups.items():
+        # ▸ случайное подвыборка, если нужно
+        if max_rows_show and len(block) > max_rows_show:
+            block = block.sample(max_rows_show, random_state=seed, replace=False)
+
+        # Убедимся, что у нас есть данные для отображения
+        if len(block) == 0:
+            print(f"Пустая группа: {combo_id}")
+            continue
+
+        # Создаем матрицу пропусков (1 = пропуск, 0 = значение есть)
+        miss = block.isna().astype(int)
+        
+        # Проверяем, есть ли пропуски в этой группе
+        total_missing = miss.sum().sum()
+        if total_missing == 0:
+            print(f"Пропусков нет в группе: {combo_id} (n={len(block)})")
+            continue
+
+        # ▸ подпись комбинации
+        if combo_id == 'ALL':
+            combo_name = "ALL"
+        else:
+            combo_name = combo_id.replace('/', ', ')
+
+        # Создаем фигуру
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Рисуем heatmap с явными параметрами
+        sns.heatmap(
+            miss,
+            cmap=cmap,
+            vmin=0,
+            vmax=1,
+            linewidths=0.2,
+            linecolor="lightgray",
+            cbar=False,
+            yticklabels=False,
+            xticklabels=True,
+            ax=ax,
+            square=False  # Важно: не делать квадратные ячейки
+        )
+        
+        # Настройки осей
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
+        ax.set_xlabel("Columns")
+        ax.set_ylabel("Rows")
+        ax.set_title(f"{title_prefix}{combo_name} (n={len(block)}, пропусков: {total_missing})")
+        
+        # Добавляем сетку для лучшей видимости
+        ax.grid(False)
+        
+        plt.tight_layout()
+        plt.show()
+
+        # Отладочная информация
+        print(f"Группа: {combo_name}")
+        print(f"Размер: {len(block)} строк")
+        print(f"Всего пропусков: {total_missing}")
+        print("Пропуски по столбцам:")
+        missing_by_col = block.isna().sum()
+        for col, count in missing_by_col.items():
+            if count > 0:
+                print(f"  {col}: {count} пропусков")
+        print("-" * 50)
+
+
+# Альтернативная упрощенная версия для отладки
+def plot_missing_by_combos_simple(df: pd.DataFrame,
+                                  cat_cols: list[str] | None = None,
+                                  figsize=(9, 4)):
+    """
+    Упрощенная версия для отладки
+    """
+    cat_cols = [c for c in (cat_cols or []) if c in df.columns]
+    
+    if cat_cols:
+        # Группируем по категориальным переменным
+        for combo, group in df.groupby(cat_cols, dropna=False):
+            print(f"\nГруппа: {combo}")
+            print(f"Размер: {len(group)} строк")
+            
+            # Создаем матрицу пропусков
+            miss = group.isna().astype(int)
+            total_missing = miss.sum().sum()
+            
+            if total_missing > 0:
+                fig, ax = plt.subplots(figsize=figsize)
+                sns.heatmap(miss, cmap=['#BDBDBD', '#d62728'], 
+                           cbar=False, yticklabels=False)
+                ax.set_title(f"Group: {combo} (missing: {total_missing})")
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                plt.show()
+                
+                print("Пропуски по столбцам:")
+                print(group.isna().sum())
+            else:
+                print("Пропусков нет")
+    else:
+        # Без группировки
+        miss = df.isna().astype(int)
+        total_missing = miss.sum().sum()
+        
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(miss, cmap=['#BDBDBD', '#d62728'], 
+                   cbar=False, yticklabels=False)
+        ax.set_title(f"All data (missing: {total_missing})")
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
+        
+        print("Пропуски по столбцам:")
+        print(df.isna().sum())
+
+
+# +-----------------------------------------------------------------------------
+# Imputation
+
+def smart_imputer(df: pd.DataFrame,
+                  *,
+                  thresh: float = .10,
+                  random_state: int | None = 0) -> pd.DataFrame:
+    """
+    Импутирует пропуски только там, где их ≤ `thresh`
+      • числовые колонки  – IterativeImputer (BayesianRidge)
+      • категориальные    – SimpleImputer(most_frequent)
+
+    Parameters
+    ----------
+    df            : исходный DataFrame
+    thresh        : порог доли NaN (0.10 = 10 %)
+    random_state  : фиксирует случайность в IterativeImputer
+
+    Returns
+    -------
+    новый DataFrame (оригинал не меняется)
+    """
+    out = df.copy()
+    miss_share = out.isna().mean()
+
+    # -------- числовые --------------------------------------------------
+    num_cols = out.select_dtypes(include="number").columns
+    num_targets = [c for c in num_cols if 0 < miss_share[c] <= thresh]
+
+    if num_targets:
+        # IterativeImputer требует ≥2 признаков; если 1 → MeanImputer
+        if len(num_targets) == 1:
+            imp_num = SimpleImputer(strategy="mean")
+        else:
+            imp_num = IterativeImputer(
+                estimator=BayesianRidge(),
+                max_iter=10,
+                random_state=random_state
+            )
+        out[num_targets] = imp_num.fit_transform(out[num_targets])
+
+    # -------- категориальные -------------------------------------------
+    cat_cols = out.select_dtypes(exclude="number").columns
+    cat_targets = [c for c in cat_cols if 0 < miss_share[c] <= thresh]
+
+    if cat_targets:
+        imp_cat = SimpleImputer(strategy="most_frequent")
+        out[cat_targets] = imp_cat.fit_transform(out[cat_targets])
+
+
+# +-----------------------------------------------------------------------------
+# Data transformers
  
+def factor_transformer(data_frame: pd.DataFrame,
+                       min_factor_levels: int = 7) -> pd.DataFrame:
+    """
+    Convert every column that has ≤ `min_factor_levels` distinct non-NA values
+    to pandas 'category' type (using pd.Categorical) and return the new frame.
 
-def factorizer(df, col_lst, num_lst):
-    if col_lst:
-        for col in col_lst:
-            df[col] = df[col].astype('category')
-    
-    if num_lst:
-        for num in num_lst:
-            df[col] = df[col].astype(float)
-    
-    return(df)
+    Parameters
+    ----------
+    data_frame : pd.DataFrame
+        Source data.
+    min_factor_levels : int, default 7
+        Upper threshold for the number of distinct levels
+        at or below which a column becomes categorical.
 
+    Returns
+    -------
+    pd.DataFrame
+        A copy of `data_frame` with selected columns converted
+        to categorical dtype.
+    """
+    # 1. Count distinct non-missing values per column
+    unique_counts = data_frame.nunique(dropna=True)
 
-def miss_counter(data):
+    # 2. Columns that meet the threshold
+    cols_to_convert = unique_counts[unique_counts <= min_factor_levels].index
 
-    missing_df = pd.DataFrame(data.isnull().sum())
-    missing_df.columns = ['Miss_abs_counts']
-    missing_df['Valid_abs_counts'] = data.shape[0] - \
-        missing_df['Miss_abs_counts']
-    missing_df['Miss_Rates,%'] = missing_df['Miss_abs_counts']/data.shape[0]
-    missing_df['Valid_Rates,%'] = missing_df['Valid_abs_counts']/data.shape[0]
-    return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 
-        'Miss_Rates,%']])
-
-
-def p_adjust(vector, n, method = 'BH'):
-
-    vector = FloatVector(np.asarray(vector))
-    new_vec = []
-    for i in vector:
-        new_vec = new_vec + [float(stats.p_adjust(i, n=n, method=method))]
-
-    return new_vec
+    # 3. Build and return a copy with those columns cast to category
+    return data_frame.assign(
+        **{col: pd.Categorical(data_frame[col]) for col in cols_to_convert}
+    )
 
 
-"""
-Dummification with NaN preserved
-"""
+# def miss_counter(data):
+
+#     missing_df = pd.DataFrame(data.isnull().sum())
+#     missing_df.columns = ['Miss_abs_counts']
+#     missing_df['Valid_abs_counts'] = data.shape[0] - \
+#         missing_df['Miss_abs_counts']
+#     missing_df['Miss_Rates,%'] = missing_df['Miss_abs_counts']/data.shape[0]
+#     missing_df['Valid_Rates,%'] = missing_df['Valid_abs_counts']/data.shape[0]
+#     return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 
+#         'Miss_Rates,%']])
+
+
+# def p_adjust(vector, n, method = 'BH'):
+
+#     vector = FloatVector(np.asarray(vector))
+#     new_vec = []
+#     for i in vector:
+#         new_vec = new_vec + [float(stats.p_adjust(i, n=n, method=method))]
+
+#     return new_vec
+
+# +-----------------------------------------------------------------------------
+# Dummification
 
 def dummification(df, cat_vars):
 
@@ -195,547 +459,524 @@ def dummification(df, cat_vars):
         
     return(df)
 
-# +-----------------------------------------------------------------------------
-# +-----------------------------------------------------------------------------
 
-"""
-Descriptive statistics
-"""
+################################################################################
+# Descriptive statistics
+################################################################################
+
 ## Simple descriptives
 
-def series_num_summary(d, digits):
-    s = d.dropna()
-    name = s.name
-    valid = s.count()
-    M = np.mean(s)
-    SD = np.std(s)
-    miin = np.min(s)
-    try:
-        p2_5 = np.percentile(s, 2.5)
-        p25 = np.percentile(s, 25)
-        Med = np.median(s)
-        p75 = np.percentile(s, 75)
-        p97_5 = np.percentile(s, 97.5)
-        maax = np.max(s)
-    except IndexError:
-        p2_5 = 0
-        p25 = 0
-        Med = 0
-        p75 = 0
-        p97_5 = 0
-        maax = 0
-
-    if len(pd.unique(s)) < 2:
-        sh = 'Уникальная'
-
-    elif len(pd.unique(s)) < 3:
-        sh = 'Не применим'
-
-    else:
-        sh = round(shapiro(s)[1],3)
-
-    a = pd.DataFrame({'Фактор': name,
-                    'Категории': '-',
-                    'Валидные': valid,
-                    'Количество': '-',
-                    'Доля': '-',
-                    'Среднее': round(M,digits),
-                    'Ст.откл.': round(SD,digits),
-                    'Мин':round(miin, digits),
-                    '2.5%': round(p2_5,digits),
-                    '25%':round(p25, digits),
-                    'Медиана': round(Med,digits),
-                    '75%':round(p75,digits),
-                    '97.5%': round(p97_5,digits),
-                    'Макс':round(maax,digits),
-                    'Значимость Ш-У': sh}, index=[0])
-
-    return(a)
+def _table_shapiro(df, digits):
+    """Return p-values of Shapiro–Wilk for every numeric column."""
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    pvals = {
+        col: (shapiro(df[col].dropna())[1]          # p-value
+              if 3 <= df[col].notna().sum() <= 5000 else np.nan)
+        for col in num_cols
+    }
+    return (
+        pd.Series(pvals, name="Тест Ш-У, значимость")
+        .round(digits)
+        .reset_index()
+        .rename(columns={"index": "Показатель"})
+    )
 
 
-def series_cat_summary(d):
-    s = d.dropna()
-    name = s.name
+def _fmt_mean_sd(series, d):      # mean ± sd
+    return f"{series.mean():.{d}f} ± {series.std(ddof=1):.{d}f}" if series.size else "NA"
 
-    if len(pd.unique(s)) < 6:
 
-        valid = len(s.dropna())
-        abs = s.dropna().value_counts()
-        perc = round(s.dropna().value_counts() / (s.dropna().shape[0])*100,1)
-        ind = perc.reset_index()['index']
-        ind.index = perc.index=abs.index
-        M = SD = miin = p25 = Med = p75 = p2_5 = p97_5 = maax = '-'
+def _fmt_median_iqr(series, d):   # median [p25; p75]
+    if series.size == 0:
+        return "NA"
+    q25, q75 = np.percentile(series, [25, 75])
+    return f"{series.median():.{d}f} [{q25:.{d}f}; {q75:.{d}f}]"
+
+
+def _fmt_min(series, d):          # min with NA fallback
+    return f"{series.min():.{d}f}" if series.size else "NA"
+
+
+def _fmt_max(series, d):          # max with NA fallback
+    return f"{series.max():.{d}f}" if series.size else "NA"
+
+
+def _fmt_n_pct(n, total, d):
+    pct = n / total * 100 if total else 0
+    return f"{n} ({pct:.{d}f}%)"
+
+
+def summary_all(data: pd.DataFrame, digits: int = 1) -> pd.DataFrame:
+    """Mimic the R `summary_all()` with per-level rows for categoricals."""
+    # 1. Normality test on numeric columns
+    shapiro_df = _table_shapiro(data, 3)
+
+    rows = []
+
+    for col in data.columns:
+        s = data[col].dropna()
+        total_n = s.size
+        is_num = pd.api.types.is_numeric_dtype(s)
+
+        # -------- NUMERIC --------------------------------------------------
+        if is_num:
+            rows.append(
+                {
+                    "Показатель": col,
+                    "Валидные,N": total_n,
+                    "Абс,доля,%": "-",
+                    "Среднее, ст.откл": _fmt_mean_sd(s, digits),
+                    "Медиана и размахи": _fmt_median_iqr(s, digits),
+                    "Мин": _fmt_min(s, digits),
+                    "Макс": _fmt_max(s, digits),
+                }
+            )
+        # -------- CATEGORICAL ----------------------------------------------
+        else:
+            # header-like line for the variable itself
+            rows.append(
+                {
+                    "Показатель": col,
+                    "Валидные,N": "NA",
+                    "Абс,доля,%": "NA",
+                    "Среднее, ст.откл": "NA",
+                    "Медиана и размахи": "NA",
+                    "Мин": "NA",
+                    "Макс": "NA",
+                }
+            )
+
+            # one row per category
+            counts = s.value_counts(dropna=False).sort_index()
+            for level, n in counts.items():
+                level_name = str(level)
+                rows.append(
+                    {
+                        "Показатель": level_name,
+                        "Валидные,N": total_n,
+                        "Абс,доля,%": _fmt_n_pct(n, total_n, digits),
+                        "Среднее, ст.откл": "-",
+                        "Медиана и размахи": "-",
+                        "Мин": "-",
+                        "Макс": "-",
+                    }
+                )
+
+    # 2. Build DataFrame
+    df = pd.DataFrame(rows)
+
+    # 3. Merge with Shapiro p-values → only numeric rows keep the number
+    df = df.merge(shapiro_df, on="Показатель", how="left")
+
+    # 4. Add running index & reorder columns
+    df.insert(0, "Индекс", range(1, len(df) + 1))
+    final_cols = [
+        "Индекс",
+        "Показатель",
+        "Валидные,N",
+        "Абс,доля,%",
+        "Среднее, ст.откл",
+        "Медиана и размахи",
+        "Мин",
+        "Макс",
+        "Тест Ш-У, значимость",
+    ]
+    return df[final_cols]
+
+
+def fisher_exact_r(cont: pd.DataFrame, seed=1000) -> tuple[str, float | None]:
+    """
+    Run Fisher's exact test via R for ANY sized contingency table with sparse cells.
+    Uses simulation for larger tables to avoid computational issues.
     
-        if len(pd.unique(s)) < 2:
-            sh = 'Уникальная'
-        else:
-            sh = '-'
+    Parameters
+    ----------
+    cont : pd.DataFrame - contingency table of any size (m × n)
+    seed : int - random seed for reproducibility
+    
+    Returns
+    -------
+    (test_name, p_value)
+    """
+    np.random.seed(seed)
+    try:
+        import rpy2.robjects as ro
+        from rpy2.robjects import pandas2ri
+        from rpy2.robjects.packages import importr
 
-        a = pd.DataFrame({'Фактор': name,
-                    'Категории': ind,
-                    'Валидные': valid,
-                    'Количество': abs,
-                    'Доля': perc,
-                    'Среднее': M,
-                    'Ст.откл.': SD,
-                    'Мин':miin,
-                    '2.5%': p2_5,
-                    '25%':p25,
-                    'Медиана': Med,
-                    '75%':p75,
-                    '97.5%': p97_5,
-                    'Макс':maax,
-                    'Значимость Ш-У': sh})
-
-    else:
-        abs = perc = ind = 'Более 5'
-        M = SD = miin = p25 = Med = p75 = maax = valid = p2_5 = p97_5 = sh = '-'
-
-        a = pd.DataFrame({'Фактор': name,
-                    'Категории': ind,
-                    'Валидные': valid,
-                    'Количество': abs,
-                    'Доля': perc,
-                    'Среднее': M,
-                    'Ст.откл.': SD,
-                    'Мин':miin,
-                    '2.5%': p2_5,
-                    '25%':p25,
-                    'Медиана': Med,
-                    '75%':p75,
-                    '97.5%': p97_5,
-                    'Макс':maax,
-                    'Значимость Ш-У': sh}, index=[0])
-         
-    return(a)           
-
-
-def summary_all(df, merge_stats=True, digits=1):
-
-    data = df
-    tb = pd.DataFrame()
-
-    for col in data.columns:
-        if data[col].dtype == object:
-            data[col] = data[col].astype('category')
-        else:
-            pass
-
-    for col in data.columns:
-        if pd.CategoricalDtype.is_dtype(data[col]) == True:
-            tb = tb.append(series_cat_summary(data[col]), ignore_index=True)
-
-        else:
-            tb = tb.append(series_num_summary(data[col], digits=digits), ignore_index=True)
-
-    tb.index = range(tb.shape[0])
-
-    if merge_stats == True:
-        tb['Среднее и ст. откл.'] = tb['Среднее'].astype(str) + ' ± '+ tb['Ст.откл.'].astype(str)
-        tb['Медиана и 25/75%'] = tb['Медиана'].astype(str) + ' ['+ tb['25%'].astype(str) + '; '+ tb['75%'].astype(str) + ']'
-        tb = tb.drop(columns=['Среднее', 'Ст.откл.', 'Медиана', '25%', '75%'])
-        tb['Доля, %'] = tb['Количество'].astype(str) + ' ('+ tb['Доля'].astype(str) + ' %)'
-
-
-        tb = tb[['Фактор', 'Категории', 'Валидные', 'Доля, %', 'Мин', 'Среднее и ст. откл.','2.5%','Медиана и 25/75%', '97.5%', 'Макс', 'Значимость Ш-У']]
-
-        tb['Среднее и ст. откл.'] = tb['Среднее и ст. откл.'].replace('- ± -', '-')
-        tb['Медиана и 25/75%'] = tb['Медиана и 25/75%'].replace('- [-; -]', '-')
-        tb['Доля, %'] = tb['Доля, %'].replace(['Более 5 (Более 5 %)', '- (- %)'],['Более 5','-'])
-
-    else:
-        pass
-
-    return(tb)
-
-## Compare 2 groups
-
-def compare_category(df, group, var, auto_c='auto'):
-
-    tb = pd.DataFrame()
-
-    a = df[[var, group]].dropna()
-    name = var
-    mtx = pd.crosstab(a[var], a[group]).to_numpy()
-
-
-    if auto_c == 'F':
-        if mtx.shape[1] > 5:
-            p = '-'
-            test_name = 'Более 5 категорий'
+        # Activate pandas-to-R conversion
+        pandas2ri.activate()
+        stats_r = importr('stats')
         
+        # Convert the contingency table to an R matrix
+        r_matrix = pandas2ri.py2rpy(cont)
+        
+        # For 2×k tables use exact method
+        if cont.shape[0] == 2:
+            result = stats_r.fisher_test(r_matrix)
+            p_value = result.rx2('p.value')[0]
+            return "Точный тест Фишера (R)", float(p_value)
+        
+        # For larger tables use Monte Carlo simulation
         else:
-            rw,col = mtx.shape
-            p = round(np.array((stats.fisher_test(
-                                                    base.matrix(mtx, nrow=rw, ncol=col)
-                                                    ,simulate_p_value = True, B = 100)[0]))[0],3)
-            test_name = 'Fisher'
-
-    elif auto_c == 'Chi':
-        p = round(chi2_contingency(mtx, correction=True)[1], 3)
-        test_name = 'Chi'
-
-    else:
-        if np.any(mtx < 5):
-            try:
-                rw,col = mtx.shape
-                p = np.array((stats.fisher_test(base.matrix(mtx, nrow=rw, ncol=col),simulate_p_value = True, B = 100)[0]))[0]
-                test_name = 'Fisher'
-            except rpy2.rinterface_lib.embedded.RRuntimeError:
-                p = 1
-                test_name = 'не применим'
-
-        else:
-            try:
-                p = chi2_contingency(mtx, correction=True)[1]
-            except:
-                p = 1
-            test_name = 'Chi'
-
-    tb = pd.DataFrame({'Фактор': name,
-                    'p, значимость': '{0:.3f}'.format(p),
-                    'Критерий': test_name}, index=[0])
-    return(tb)
-
-
-def compare_numerical_2g(df, group, var, auto_n='mw'):
-
-    a = pd.DataFrame()
-    tb = pd.DataFrame()
-
-    name = var
-    a[group] = df[group].dropna()
-
-    cat = pd.unique(a[group])
-
-    a[var] = df[var].dropna()
-    try:
-        x = a[a[group] == cat[0]][var].dropna()
-        y = a[a[group] == cat[1]][var].dropna()
-    except IndexError:
-        x = np.zeros(3)
-        y = np.zeros(3)
-
-    if auto_n=='mw':
-        try:
-            p = round(mannwhitneyu(x,y)[1],3)
-            test_name = 'U-M-W'    
-        except ValueError:
-            p = 1
-            test_name = 'U-M-W'
-    
-    elif len(pd.unique(x)) < 4:
-        try:
-            p = round(mannwhitneyu(x,y)[1],3)
-            test_name = 'U-M-W'    
-        except ValueError:
-            p = 1
-            test_name = 'U-M-W'
-
-    elif len(pd.unique(y)) < 4:
-        try:
-            p = round(mannwhitneyu(x,y)[1],3)
-            test_name = 'U-M-W'    
-        except ValueError:
-            p = 1
-            test_name = 'U-M-W'
-    
-    else:
-        if shapiro(x)[1] < 0.05:
-            try:
-                p = round(mannwhitneyu(x,y)[1],3)
-                test_name = 'U-M-W'    
-            except ValueError:
-                p = 1
-                test_name = 'U-M-W'
-
-        elif shapiro(y)[1] < 0.05:
-            try:
-                p = round(mannwhitneyu(x,y)[1],3)
-                test_name = 'U-M-W'    
-            except ValueError:
-                p = 1
-                test_name = 'U-M-W'
-
-        else:
-            p = round(ttest_ind(x,y, equal_var = False)[1],3)
-            test_name = 't-test'
-
-    tb = pd.DataFrame({'Фактор': name,
-                    'p, значимость': '{0:.3f}'.format(p),
-                    'Критерий': test_name}, index=[0])
-    return(tb)
-
-
-
-def compare_df(df, group, auto_c='auto', auto_n='mw'):
-
-    data = df
-
-    tb = pd.DataFrame()
-
-    for col in data.columns:
-        if data[col].dtype == object:
-            data[col] = data[col].astype('category')
-        else:
-            pass
-
-    colls = [x for x in list(data.columns) if x != group]
-
-    for col in colls:
-        if pd.CategoricalDtype.is_dtype(data[col]) == True:
-            tb = tb.append(compare_category(data, group=group, var=col, auto_c=auto_c))
-
-        else:
-            tb = tb.append(compare_numerical_2g(data, group=group, var=col, auto_n=auto_n))
-
-    tb.index = range(tb.shape[0])
-
-    return(tb)   
-
-
-## Compare 3/4 groups
-
-def compare_numerical_multig(df, group, var, n_groups=3, auto_n='krus'):
-
-    a = pd.DataFrame()
-    tb = pd.DataFrame()
-
-    name = var
-
-    a[group] = df[group]
-    a[var] = df[var]
-
-    a = a.dropna()
-
-    cat = pd.unique(a[group])
-
-    
-
-    if len(cat) == 3:
-    
-        x = a[a[group] == cat[0]][var].to_numpy().ravel()
-        y = a[a[group] == cat[1]][var].to_numpy().ravel()
-        z = a[a[group] == cat[2]][var].to_numpy().ravel()
-
-        if auto_n=='krus':
-            try:
-                p = round(kruskal(x,y,z, nan_policy='omit')[1],3)
-                test_name = 'Kr-W'    
-            except:
-                print(var)
-    
-        else:
-
-            p = round(f_oneway(x,y,z)[1],3)
-            test_name = 'ANOVA'
-
-        tb = pd.DataFrame({'Фактор': name,
-                    'p, значимость': '{0:.3f}'.format(p),
-                    'Критерий': test_name}, index=[0])
-    
-    elif len(cat) == 4:
-    
-        x = a[a[group] == cat[0]][var].to_numpy().ravel()
-        y = a[a[group] == cat[1]][var].to_numpy().ravel()
-        z = a[a[group] == cat[2]][var].to_numpy().ravel()
-        q = a[a[group] == cat[3]][var].to_numpy().ravel()
-
-        if auto_n=='krus':
-
-            p = round(kruskal(x,y,z,q, nan_policy='omit')[1],3)
-            test_name = 'Kr-W'    
-    
-        else:
-
-            p = round(f_oneway(x,y,z,q)[1],3)
-            test_name = 'ANOVA'
-
-        tb = pd.DataFrame({'Фактор': name,
-                    'p, значимость': '{0:.3f}'.format(p),
-                    'Критерий': test_name}, index=[0])
-
-    else:
-        pass  
-
-    return(tb)
-
-
-def compare_multigroup(df, group, n_groups=3, auto_c='auto', auto_n='krus'):
-
-    data = df
-
-    tb = pd.DataFrame()
-
-    for col in data.columns:
-        if data[col].dtype == object:
-            data[col] = data[col].astype('category')
-        else:
-            pass
-
-    colls = [x for x in list(data.columns) if x != group]
-
-    for col in colls:
-        if pd.CategoricalDtype.is_dtype(data[col]) == True:
-            tb = tb.append(compare_category(data, group=group, var=col, auto_c=auto_c))
-
-        else:
-            tb = tb.append(compare_numerical_multig(data, group=group, var=col, n_groups=n_groups, auto_n=auto_n))
-
-    tb.index = range(tb.shape[0])
-
-    return(tb)  
-
-
-## 2 groups descriptives and compare combine
-
-def compare_table_2g(df, col_lst, group, 
-    cat_1, cat_2, 
-    name_1, name_2, 
-    filename = None, 
-    total_group = False, 
-    store_only_comparison=False, 
-    digits=2, 
-    save_tab=True):
-
-    """
-    compare_table_2g - сохранят описательные и сравнительные статистики по 2-м группам
-
-    df - общая таблица,
-    col_lst - список отобранных колонок с переменными, по которым будет проведено сравнение, вместе с группирующей переменной
-    group - группирующая переменная
-    cat_1, cat_2 - названия категорий группирующей переменной
-    name_1, name_2 - названия подгрупп групирующей переменной, как они будут в таблицах и на листах
-    filename - имя файла при сохранении
-    total_group - использовать ли описательные статистики для всей группы (сливая подгруппы в одну)
-    store_only_comparison - сохранять/выводить ли только таблицу сравнения
-    digits - кол-во знаков после запятой для вещественных признаков
-    save_tab - сохранять ли таблицу? Если не сохранять, будет выведена только сравнительная таблица в формате pandas Dataframe
-
-    """
-
-    s = summary_all(df[df[group]==cat_1][col_lst], merge_stats=True, digits=digits)
-    d = summary_all(df[df[group]==cat_2][col_lst], merge_stats=True, digits=digits)
-
-    compare_table = compare_df(df[col_lst], group=group, auto_c='auto', auto_n='auto')
-
-    tab = s[['Фактор', 'Категории','Доля, %', 'Валидные', 'Медиана и 25/75%','Среднее и ст. откл.']].merge(d[['Фактор', 'Категории','Доля, %', 'Валидные', 'Медиана и 25/75%', 'Среднее и ст. откл.']], \
-        on=['Фактор', 'Категории'], suffixes=('_' + name_1, '_' + name_2))
-
-    tab = tab.merge(compare_table, on='Фактор')
-
-    tab = tab[['Фактор', 'Категории', 'Валидные_' + name_1, 'Валидные_' + name_2, 'Доля, %_' + name_1, 'Доля, %_' + name_2, 'Медиана и 25/75%_' + name_1, 'Медиана и 25/75%_' + name_2, 'Среднее и ст. откл._' + name_1, 'Среднее и ст. откл._' + name_2,'p, значимость', 'Критерий']]
-
-    if save_tab:
-
-        writer = pd.ExcelWriter(filename, engine='xlsxwriter')
-
-        if store_only_comparison:
-            tab.to_excel(writer, sheet_name='Сравнение')
-
-        else:
-
-            if total_group:
-                summary_all(df[col_lst]).to_excel(writer, sheet_name='Вся группа')
-            else: pass
+            ro.r(f'set.seed({seed})')
+            result = stats_r.fisher_test(r_matrix, simulate_p_value=True)
+            p_value = result.rx2('p.value')[0]
+            return "Точный тест Фишера (R, симуляция)", float(p_value)
             
-            s.to_excel(writer, sheet_name=name_1)
-            d.to_excel(writer, sheet_name=name_2)
+    except Exception as e:
+        # Fallback to chi-square with correction
+        chi2, p_val, *_ = stats.chi2_contingency(cont, correction=True)
+        return f"R не найден → Χ²-тест", p_val
 
-            tab.to_excel(writer, sheet_name='Сравнение')
 
-        writer.save()
+def _shapiro_ok(x: np.ndarray) -> bool:
+    """TRUE ⇢ p > .05 (looks Normal) – reproduces R part."""
+    x = x[~np.isnan(x)]
+    if x.size < 3 or x.size > 5000 or np.unique(x).size < 3:
+        return False
+    try:
+        return stats.shapiro(x).pvalue > 0.05
+    except Exception:
+        return False
 
-        return(print('Saved'))
 
+def compare_all(
+    df: pd.DataFrame,
+    group_var: str,
+    digits: int = 1,
+    add_minmax: bool = False,
+) -> pd.DataFrame:
+    """
+    Python re-implementation of the R function `compare_all`.
+
+    Parameters
+    ----------
+    df         : pd.DataFrame
+    group_var  : str              – name of the grouping column
+    digits     : int, default 1   – decimals in formatted output
+    add_minmax : bool, default False
+                                   – include 'min-max' row for numerics
+
+    Returns
+    -------
+    pd.DataFrame – summary table (ready for copy/paste to docs)
+    """
+    # ------------------------------------------------------------ #
+    # 0. Preparation                                               #
+    # ------------------------------------------------------------ #
+    wk = df.copy(deep=True)   # never touch the caller's frame!
+
+    # keep the original order of groups (factor levels first, else order of appearance)
+    if pd.api.types.is_categorical_dtype(wk[group_var]):
+        groups = list(wk[group_var].cat.categories)
     else:
+        groups = list(pd.unique(wk[group_var]))
+    n_groups = len(groups)
 
-        return(tab)
+    # temporary fix: columns starting with a digit -> prepend 'firstnum_'
+    newcols = {
+        col: f"firstnum_{col}" if re.match(r"^\d", str(col)) else col
+        for col in wk.columns
+    }
+    wk.rename(columns=newcols, inplace=True)
 
-## 3 groups descriptives and compare combine with multiple comparison adjustment
+    # mapping to restore names only for the 'Фактор' column later
+    reverse_fix = {v: k for k, v in newcols.items()}
 
-def compare_table_3g(
-    df, 
-    col_lst, 
-    group, 
-    group_set_lst,
-    filename = None, 
-    correct = True, 
-    save_tab = True,
-    digits=2
-    ):
+    # helper format strings
+    fmt_mean_sd = lambda m, s: f"{m:.{digits}f} ± {s:.{digits}f}"
+    fmt_med_iqr = lambda d, q1, q3: f"{d:.{digits}f} [{q1:.{digits}f}, {q3:.{digits}f}]"
+    fmt_minmax = lambda mn, mx: f"({mn:.{digits}f}; {mx:.{digits}f})"
+    fmt_pval = lambda p: f"{p:.3f}" if p is not None and not np.isnan(p) else ""
 
-    data = df[col_lst].copy()
-    
-    data[group] = data[group].replace(group_set_lst, [1,2,3])
-    print(str(group_set_lst) + ' = ' + str([1,2,3]))
+    rows = []
+    row_id = 1
 
-    p_common_df = compare_multigroup(data, group) 
+    # ------------------------------------------------------------ #
+    # 1. Iterate over every variable except the group var          #
+    # ------------------------------------------------------------ #
+    for var in [c for c in wk.columns if c != group_var]:
 
-    tab12 = compare_table_2g(data[data[group] != 3], 
-        data.columns, 
-        group, 
-        1, 
-        2, 
-        '_1', 
-        '_2', 
-        filename = None, 
-        total_group = False, 
-        store_only_comparison=True, 
-        digits=digits, 
-        save_tab=False).rename(columns={'p, значимость': 'p_12'})
+        col_ser = wk[var]
+        # ---------- NUMERIC ------------------------------------------------
+        if pd.api.types.is_numeric_dtype(col_ser):
 
-    tab23 = compare_table_2g(data[data[group] != 1], 
-        data.columns, 
-        group, 
-        2, 
-        3, 
-        '_2', 
-        '_3', 
-        filename = None, 
-        total_group = False, 
-        store_only_comparison=True, 
-        digits=digits, 
-        save_tab=False).rename(columns={'p, значимость': 'p_23'})
+            desc = (
+                wk.groupby(group_var)[var]
+                .agg(
+                    mean="mean",
+                    sd="std",
+                    median="median",
+                    q1=lambda x: x.quantile(0.25),
+                    q3=lambda x: x.quantile(0.75),
+                    mn="min",
+                    mx="max",
+                    N=lambda x: x.notna().sum(),
+                )
+                .reindex(groups)
+            )
+            desc["N"] = desc["N"].fillna(0).astype(int)
 
-    tab13 = compare_table_2g(data[data[group] != 2], 
-        data.columns, 
-        group, 
-        1, 
-        3, 
-        '_1', 
-        '_3', 
-        filename = None, 
-        total_group = False, 
-        store_only_comparison=True, 
-        digits=digits, 
-        save_tab=False).rename(columns={'p, значимость': 'p_13'})
+            # global normality decision
+            is_normal = all(_shapiro_ok(wk.loc[wk[group_var] == g, var].to_numpy())
+                            for g in groups)
 
-    tab = tab12.merge(tab23, on=['Фактор', 'Категории']).merge(tab13, on=['Фактор', 'Категории']).merge(p_common_df, on='Фактор')
-    tab = tab[['Фактор', 'Категории', 'Валидные__1_x', 'Валидные__2_x', 'Валидные__3_x', 'Доля, %__1_x',
-        'Доля, %__2_x','Доля, %__3_x', 'Медиана и 25/75%__1_x', 'Медиана и 25/75%__2_x', 'Медиана и 25/75%__3_x',
-        'Среднее и ст. откл.__1_x', 'Среднее и ст. откл.__2_x', 'Среднее и ст. откл.__3_x', 'p, значимость', 'p_12','p_23', 'p_13','Критерий_y']]
-    tab.columns = ['Фактор', 'Категории', 'Валидные__1', 'Валидные__2', 'Валидные__3', 'Доля, %__1',
-        'Доля, %__2','Доля, %__3', 'Медиана и 25/75%__1', 'Медиана и 25/75%__2', 'Медиана и 25/75%__3',
-        'Среднее и ст. откл.__1', 'Среднее и ст. откл.__2', 'Среднее и ст. откл.__3', 'p, значимость', 'p_12','p_23', 'p_13','post-hoc','Критерий']    
+            # choose the right inferential test
+            p_val = None
+            test_name = ""
+            # all groups must contain at least 2 distinct values
+            valid_groups = [
+                wk.loc[wk[group_var] == g, var].dropna().nunique() > 1 for g in groups
+            ]
 
-    if correct:
-        for i in tab.index:
-            row = tab.loc[i, ['p_12','p_23', 'p_13']]
-            tab.loc[i, ['p_12','p_23', 'p_13']] = p_adjust(row, n = len(row))
+            if not all(valid_groups):
+                test_name = "Недостаточно данных (нулевая дисперсия в группе)"
+            else:
+                try:
+                    if n_groups == 2:
+                        g1, g2 = [wk.loc[wk[group_var] == g, var].dropna() for g in groups]
+                        if is_normal:
+                            p_val = stats.ttest_ind(g1, g2, equal_var=False).pvalue
+                            test_name = "t-тест Стьюдента"
+                        else:
+                            p_val = stats.mannwhitneyu(g1, g2, alternative="two-sided").pvalue
+                            test_name = "Тест Вилкоксона"
+                    else:  # > 2 groups
+                        arrays = [wk.loc[wk[group_var] == g, var].dropna() for g in groups]
+                        if any(len(a) <= 1 for a in arrays):
+                            test_name = "Невозможно выполнить тест: недостаточно наблюдений"
+                        elif is_normal:
+                            p_val = stats.f_oneway(*arrays).pvalue
+                            test_name = "ANOVA"
+                        else:
+                            p_val = stats.kruskal(*arrays).pvalue
+                            test_name = "Тест Краскела-Уоллиса"
+                except Exception:
+                    test_name = "Ошибка при выполнении теста"
+                    p_val = None
+
+            # ---------- assemble rows ----------------------------------
+            stat_rows = [
+                ("среднее ± СО",
+                 [fmt_mean_sd(desc.loc[g, 'mean'], desc.loc[g, 'sd']) for g in groups]),
+                ("медиана [25%; 75%]",
+                 [fmt_med_iqr(desc.loc[g, 'median'], desc.loc[g, 'q1'], desc.loc[g, 'q3'])
+                  for g in groups]),
+            ]
+            if add_minmax:
+                stat_rows.append(
+                    ("Мин - Макс",
+                     [fmt_minmax(desc.loc[g, 'mn'], desc.loc[g, 'mx']) for g in groups])
+                )
+
+            for ix, (stat_name, stat_values) in enumerate(stat_rows):
+                row = {
+                    "id": row_id,
+                    "Фактор": var if ix == 0 else "",
+                    "Статистика": stat_name,
+                    **{g: stat_values[i] for i, g in enumerate(groups)},
+                    **{f"n{i+1}": desc.loc[groups[i], "N"] for i in range(n_groups)},
+                    "test_used": test_name if ix == 0 else "",
+                    "p_value": fmt_pval(p_val) if ix == 0 else "",
+                }
+                rows.append(row)
+                row_id += 1
+
+        # ---------- CATEGORICAL (factor) -----------------------------------
+        else:
+            levels = pd.unique(col_ser.dropna())
+            cont = pd.crosstab(wk[var], wk[group_var], dropna=True) \
+                    .reindex(index=levels, columns=groups, fill_value=0)
+
+            # ------- choose the inferential test -------------------------
+            if cont.shape[0] < 2 or cont.shape[1] < 2:
+                test_name, p_val = "Недостаточно данных для теста", None
+
+            # Any table with sparse cells - use Fisher's test via R
+            elif (cont.values < 5).any():
+                test_name, p_val = fisher_exact_r(cont)
+
+            else:
+                # Well-populated table - use regular chi-square
+                chi2, p_val, *_ = stats.chi2_contingency(cont)
+                test_name = "Χ²-тест"
+
+            # group-wise denominators
+            valid_n = (wk.groupby(group_var)[var]
+                        .count()
+                        .reindex(groups)
+                        .fillna(0)         # NEW ▶ пропуски → 0
+                        .astype(int))      # затем int
+
+            # -------- one output row per category level ------------------
+            for j, level in enumerate(levels):
+                counts = cont.loc[level]
+                row = {
+                    "id": row_id,
+                    "Фактор": var if j == 0 else "",
+                    "Статистика": level,
+                    **{
+                        g: f"{counts[g]} "
+                           f"({(counts[g]/valid_n[g]*100 if valid_n[g] else 0):.{digits}f}%)"
+                        for g in groups
+                    },
+                    **{f"n{i+1}": valid_n[groups[i]] for i in range(n_groups)},
+                    "test_used": test_name if j == 0 else "",
+                    "p_value": (f"{p_val:.3f}" if j == 0 and p_val is not None else "")
+                }
+                rows.append(row)
+                row_id += 1
+
+    # ------------------------------------------------------------ #
+    # 2. Wrap-up                                                  #
+    # ------------------------------------------------------------ #
+    out = pd.DataFrame(rows)
+
+    # Final column order
+    out = out[
+        ["id", "Фактор", "Статистика", *groups,
+         *[f"n{i+1}" for i in range(n_groups)], "test_used", "p_value"]
+    ]
+
+    # polish column headers
+    out.rename(columns={
+        "test_used": "Статистический тест",
+        "p_value": "Значимость, р"
+    }, inplace=True)
+
+    # restore original variable names (remove the temporary prefix)
+    out["Фактор"] = out["Фактор"].replace(reverse_fix)
+
+    return out
 
 
-    if save_tab:
-        tab.to_excel(filename)
-        print('Saved')
+
+def _pair_names(groups: List[str]) -> List[str]:
+    """Return ``['g1 - g2', 'g1 - g3', …]`` in the order of combinations."""
+    return [f"{g1} - {g2}" for g1, g2 in combinations(groups, 2)]
+
+
+def pairwise_comparisons(
+        data: pd.DataFrame,
+        group_var: str,
+        p_adjust_method: str = "none"
+) -> pd.DataFrame:
+    """
+    Perform pairwise comparisons (numeric & categorical) for every variable
+    against a multi-level grouping factor.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+    group_var : str
+        Column name that defines the groups (must contain >2 levels).
+    p_adjust_method : str
+        'none' (default) or any method accepted by
+        statsmodels.stats.multitest.multipletests
+        ('bonferroni', 'holm', 'fdr_bh', …).
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per analysed variable, columns = every pair of groups.
+        Cells hold raw or adjusted p-values (NaN if test not applicable).
+    """
+    # 0. sanity ----------------------------------------------------------------
+
+    if group_var not in data.columns:
+        raise KeyError(f"'{group_var}' not found in DataFrame")
+
+    groups = data[group_var].dropna().unique()
+    if len(groups) <= 2:
+        raise ValueError("Grouping variable must have more than 2 levels")
+
+    group_pairs = list(combinations(groups, 2))
+    pair_cols = _pair_names(groups)
+
+    # 1. iterate over variables -----------------------------------------------
+    out_rows = []
+    idx = 1
+
+    for var in [c for c in data.columns if c != group_var]:
+
+        col = data[var]
+        if col.isna().all():
+            continue                                                   # skip N/A only
+
+        p_raw = [np.nan] * len(pair_cols)                              # placeholder
+
+        # -------- numeric -----------------------------------------------------
+        if pd.api.types.is_numeric_dtype(col):
+            # single Shapiro on all non-NA values (same as original R helper)
+            try:
+                vals = col.dropna()
+                normal = len(vals) >= 3 and len(vals) <= 5000 \
+                         and stats.shapiro(vals).pvalue > .05
+            except Exception:
+                normal = False
+
+            for ix, (g1, g2) in enumerate(group_pairs):
+                x, y = (data.loc[data[group_var] == g, var].dropna() for g in (g1, g2))
+                if len(x) < 2 or len(y) < 2:
+                    continue
+
+                try:
+                    if normal:
+                        p = stats.ttest_ind(x, y, equal_var=False).pvalue
+                    else:
+                        p = stats.mannwhitneyu(x, y, alternative="two-sided",
+                              method="asymptotic").pvalue
+                    p_raw[ix] = float(p)
+                except Exception as e:
+                    warnings.warn(f"{var}: test failed for {g1}-{g2} → {e}")
+
+        # -------- categorical -------------------------------------------------
+        else:
+            # ensure categorical dtype (remove future-warning)
+            if not isinstance(col.dtype, CategoricalDtype):
+                col = col.astype("category")
+
+            for ix, (g1, g2) in enumerate(group_pairs):
+                sub = data[data[group_var].isin([g1, g2])]
+                table = pd.crosstab(sub[var], sub[group_var])
+
+                if table.shape[0] < 2 or table.shape[1] < 2:
+                    continue
+
+                try:
+                    if (table.values < 5).any():
+                        _, p = fisher_exact_r(table)                   # tuple(name, p)
+                    else:
+                        p = stats.chi2_contingency(table)[1]
+                    p_raw[ix] = float(p)
+                except Exception as e:
+                    warnings.warn(f"{var}: categorical test failed for {g1}-{g2} → {e}")
+
+        # -------- assemble row -----------------------------------------------
+        if not np.isnan(p_raw).all():
+            row = {"id": idx, "Factor": var, **dict(zip(pair_cols, p_raw))}
+
+            # adjust if requested
+            if p_adjust_method.lower() != "none":
+                valid_idx = [i for i, p in enumerate(p_raw) if not np.isnan(p)]
+                if valid_idx:
+                    adj = multitest.multipletests(
+                        [p_raw[i] for i in valid_idx],
+                        method=p_adjust_method.lower()
+                    )[1]
+                    for i, adj_p in zip(valid_idx, adj):
+                        row[pair_cols[i]] = adj_p
+
+            out_rows.append(row)
+            idx += 1
         
-    else:
-        return(tab)
+
+    return pd.DataFrame(out_rows).round(3)
 
 
-"""
-95% CI for means, medians, proportions
-"""
+# ------------------------------------------------------------------------------
+# 95% CI for means, medians, proportions
 
 ## Numerics
 
@@ -838,12 +1079,209 @@ def binary_95CI(df, cat_vars):
 
     return data.reindex(columns=['Factor', 'Point', '2.5% CI', '97.5% CI'])
 
-# +----------------------------------------------------------------------------------
-# +----------------------------------------------------------------------------------
+################################################################################
+# Regressions
+################################################################################
 
-"""
-Regressions
-"""
+
+def calc_vif(df: pd.DataFrame,
+             target: str,
+             thresh: float = 5.0,          # «красная зона»
+             drop_const: bool = True) -> Bunch:
+    """
+    Возвращает DataFrame со значениями VIF и список «проблемных» признаков
+    (VIF ≥ thresh).
+
+    Схема:
+        •  численные признаки  – без изменений
+        •  бинарные            – без изменений (0/1)
+        •  номинальные         – OneHot, drop_first
+    """
+    X = df.drop(columns=[target]).copy()
+
+    # --- делим признаки по типу ----------------------------------------
+    num_cols = X.select_dtypes(include=["number"]).columns.tolist()
+    cat_cols = X.select_dtypes(exclude=["number"]).columns.tolist()
+
+    # удаляем константы, если нужно
+    if drop_const:
+        const_cols = [c for c in num_cols if X[c].nunique(dropna=False) <= 1]
+        X.drop(columns=const_cols, inplace=True)
+        num_cols = [c for c in num_cols if c not in const_cols]
+
+    # --- трансформации --------------------------------------------------
+    ct = ColumnTransformer(
+        transformers=[
+            ("num", "passthrough", num_cols),
+            ("cat", OneHotEncoder(drop="first"), cat_cols)
+        ],
+        remainder="drop"
+    )
+
+    X_encoded = ct.fit_transform(X)
+    feature_names = (num_cols +
+                     list(ct.named_transformers_["cat"].get_feature_names_out(cat_cols)))
+
+    # --- вычисляем VIF --------------------------------------------------
+    vif_vals = [variance_inflation_factor(X_encoded, i)
+                for i in range(X_encoded.shape[1])]
+
+    vif_tbl = (pd.DataFrame({"Feature": feature_names,
+                             "VIF": np.array(vif_vals)})
+                 .sort_values("VIF", ascending=False)
+                 .reset_index(drop=True))
+
+    return Bunch(vif_table=vif_tbl,
+                 low_vif=vif_tbl.loc[vif_tbl["VIF"] < thresh, "Feature"].tolist())
+
+
+
+def univariate_lineareg(df: pd.DataFrame,
+                        target: str,
+                        predictors: list[str],
+                        *,
+                        normalize_numeric: bool = True,
+                        digits: int = 3) -> pd.DataFrame:
+    """
+    Однофакторный линейный регрессионный анализ.
+
+    • Для числовых признаков (n unique > 2) – один коэффициент (β);
+      при `normalize_numeric=True` предварительно стандартизируется.
+    • Для категориальных автоматически создаются dummy-переменные
+      (statsmodels: `C(var)`), на каждый уровень → отдельная строка.
+
+    Возвращает таблицу:
+
+    Переменная | Категории | Коэффициент | 95% ДИ | R² | p-значение
+    """
+    rows = []
+
+    for var in predictors:
+        sub = df[[target, var]].dropna()
+        if sub.empty:
+            continue
+
+        # ── числовой / категориальный? ──────────────────────────────
+        is_num = is_numeric_dtype(sub[var]) and sub[var].nunique() > 2
+        formula = f"{target} ~ {var}" if is_num else f"{target} ~ C({var})"
+
+        # ── опциональная стандартизация числовых ───────────────────
+        if is_num and normalize_numeric:
+            mu, sd = sub[var].mean(), sub[var].std(ddof=0)
+            if sd > 0:
+                sub[var] = (sub[var] - mu) / sd
+
+        # ── модель --------------------------------------------------
+        model = smf.ols(formula, data=sub).fit()
+        r2   = round(model.rsquared, digits)
+        pmod = round(model.f_pvalue, digits)
+
+        # коэффициенты без Intercept
+        params = model.params.drop('Intercept', errors='ignore')
+        ci     = model.conf_int().drop('Intercept', errors='ignore')
+
+        for coef_name, beta in params.items():
+            # ---- расшифровываем название коэффициента -------------
+            if is_num:
+                cat_label = None
+                beta_name = var                       # для CI
+            else:
+                # пример имени: C(Therapy)[T.Drug A]
+                cat_label = coef_name.split('T.', 1)[-1].rstrip(']')
+                beta_name = coef_name
+
+            ci_lo, ci_hi = ci.loc[beta_name]
+
+            rows.append({
+                "Переменная": var,
+                "Категории":  cat_label,
+                "Коэффициент": round(beta, digits),
+                "95% ДИ": f"[{ci_lo:.{digits}f}; {ci_hi:.{digits}f}]",
+                "R²": r2,
+                "p-значение": pmod
+            })
+
+    return (pd.DataFrame(rows)
+              .sort_values("p-значение")
+              .reset_index(drop=True))
+
+
+def univariate_logreg(df: pd.DataFrame,
+                      target: str,
+                      predictors: list[str],
+                      *,
+                      normalize_numeric: bool = True,
+                      digits: int = 3) -> pd.DataFrame:
+    """
+    Однофакторный ЛОГИСТИЧЕСКИЙ регрессионный анализ
+    (binary outcome 0/1).
+
+    Таблица-вывод
+    -------------
+    Переменная | Категории | Отношение шансов | 95% ДИ | R² | p-значение
+
+    • Для числовых признаков (n>2 уникальных) можно стандартизировать.
+    • Для категориальных автоматически строятся dummy-переменные
+      (statsmodels:  C(var) ).
+    • OR и доверительный интервал получаются из exp(coef ± CI).
+    • Pseudo-R² = McFadden (model.prsquared).
+    • p-value – LRT p-value (model.llr_pvalue).
+    """
+    rows = []
+
+    for var in predictors:
+        sub = df[[target, var]].dropna()
+        if sub.empty:
+            continue
+
+        # —- определяем тип признака
+        is_num = is_numeric_dtype(sub[var]) and sub[var].nunique() > 2
+        formula = f"{target} ~ {var}" if is_num else f"{target} ~ C({var})"
+
+        # —- стандартизация числовых
+        if is_num and normalize_numeric:
+            mu, sd = sub[var].mean(), sub[var].std(ddof=0)
+            if sd > 0:
+                sub[var] = (sub[var] - mu) / sd
+
+        # —- логистическая модель
+        try:
+            model = smf.logit(formula, data=sub).fit(disp=False)
+        except Exception as e:            # например perfect separation
+            print(f"{var}: не удалось подогнать модель ({e})")
+            continue
+
+        pseudo_r2 = round(model.prsquared, digits)
+        pmod      = round(model.llr_pvalue, digits)
+
+        # коэффициенты без интерсепта
+        params = model.params.drop("Intercept", errors="ignore")
+        ci     = model.conf_int().drop("Intercept", errors="ignore")
+
+        for coef_name, beta in params.items():
+            if is_num:
+                cat_label = None
+                idx_name  = var            # ключ для CI
+            else:
+                # название вида C(var)[T.level]
+                cat_label = coef_name.split("T.", 1)[-1].rstrip("]")
+                idx_name  = coef_name
+
+            ci_lo, ci_hi = ci.loc[idx_name]
+
+            rows.append({
+                "Переменная": var,
+                "Категории":  cat_label,
+                "Отношение шансов": round(np.exp(beta), digits),
+                "95% ДИ": f"[{np.exp(ci_lo):.{digits}f}; {np.exp(ci_hi):.{digits}f}]",
+                "R²": pseudo_r2,
+                "p-значение": pmod
+            })
+
+    return (pd.DataFrame(rows)
+              .sort_values("p-значение")
+              .reset_index(drop=True))
+
 
 def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
     """AI is creating summary for onedim_coxregr
@@ -949,82 +1387,81 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
     return model_tab    
 
 
-def onedim_logistic(df, target, adj=False, adj_cols_lst=None):
-    """AI is creating summary for onedim_logistic_regression
+# def onedim_logistic(df, target, adj=False, adj_cols_lst=None):
+#     """AI is creating summary for onedim_logistic_regression
 
-    Args:
-        df: original dataframe 
-        target: binary target column (0/1)
-        adj (bool, optional): do we need to adjust for covariates? Defaults to False.
-        adj_cols_lst (List): if adj == True, provide list of covariates for adjustments. Defaults to None.
-    """    
-    columns = [x for x in df.columns if x != target]
+#     Args:
+#         df: original dataframe 
+#         target: binary target column (0/1)
+#         adj (bool, optional): do we need to adjust for covariates? Defaults to False.
+#         adj_cols_lst (List): if adj == True, provide list of covariates for adjustments. Defaults to None.
+#     """    
+#     columns = [x for x in df.columns if x != target]
 
-    logreg_results = pd.DataFrame()
+#     logreg_results = pd.DataFrame()
 
-    # If adjustment is needed, we fit the model including adjusted columns but do not include them in results
-    if adj_cols_lst is not None:
-        for col in columns:
-            try:
-                # Prepare the data
-                X = df[[col] + adj_cols_lst].dropna()
-                y = df[target].loc[X.index]
+#     # If adjustment is needed, we fit the model including adjusted columns but do not include them in results
+#     if adj_cols_lst is not None:
+#         for col in columns:
+#             try:
+#                 # Prepare the data
+#                 X = df[[col] + adj_cols_lst].dropna()
+#                 y = df[target].loc[X.index]
                 
-                # Fit the logistic regression model
-                model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
+#                 # Fit the logistic regression model
+#                 model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
                 
-                # Extract coefficients and statistics
-                OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
-                p = round(model.pvalues[col], 3)          # p-value
-                conf_int = model.conf_int().loc[col]
-                conf0 = round(np.exp(conf_int[0]), 2)     # Lower CI
-                conf1 = round(np.exp(conf_int[1]), 2)     # Upper CI
+#                 # Extract coefficients and statistics
+#                 OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
+#                 p = round(model.pvalues[col], 3)          # p-value
+#                 conf_int = model.conf_int().loc[col]
+#                 conf0 = round(np.exp(conf_int[0]), 2)     # Lower CI
+#                 conf1 = round(np.exp(conf_int[1]), 2)     # Upper CI
 
-            except Exception as e:
-                OR = 'NA'
-                p = 1
-                conf0 = 'NA'
-                conf1 = 'NA'
+#             except Exception as e:
+#                 OR = 'NA'
+#                 p = 1
+#                 conf0 = 'NA'
+#                 conf1 = 'NA'
 
-            logreg_results = pd.concat(
-                [logreg_results,
-                 pd.DataFrame({'Фактор': col, 'OR': OR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1, 'p_val': p}, index=[0])],
-                ignore_index=True)
-            logreg_results = logreg_results[~logreg_results['Фактор'].isin(adj_cols_lst)]
+#             logreg_results = pd.concat(
+#                 [logreg_results,
+#                  pd.DataFrame({'Фактор': col, 'OR': OR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1, 'p_val': p}, index=[0])],
+#                 ignore_index=True)
+#             logreg_results = logreg_results[~logreg_results['Фактор'].isin(adj_cols_lst)]
 
-    else:
-        # Fit models without adjustment
-        for col in columns:
-            try:
-                # Prepare the data
-                X = df[[col]].dropna()
-                y = df[target].loc[X.index]
+#     else:
+#         # Fit models without adjustment
+#         for col in columns:
+#             try:
+#                 # Prepare the data
+#                 X = df[[col]].dropna()
+#                 y = df[target].loc[X.index]
                 
-                # Fit the logistic regression model
-                model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
+#                 # Fit the logistic regression model
+#                 model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
                 
-                # Extract coefficients and statistics
-                OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
-                p = round(model.pvalues[col], 3)          # p-value
-                conf_int = model.conf_int().loc[col]
-                conf0 = round(np.exp(conf_int[0]), 2)     # Lower CI
-                conf1 = round(np.exp(conf_int[1]), 2)     # Upper CI
+#                 # Extract coefficients and statistics
+#                 OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
+#                 p = round(model.pvalues[col], 3)          # p-value
+#                 conf_int = model.conf_int().loc[col]
+#                 conf0 = round(np.exp(conf_int[0]), 2)     # Lower CI
+#                 conf1 = round(np.exp(conf_int[1]), 2)     # Upper CI
 
-            except Exception as e:
-                OR = 'NA'
-                p = 1
-                conf0 = 'NA'
-                conf1 = 'NA'
+#             except Exception as e:
+#                 OR = 'NA'
+#                 p = 1
+#                 conf0 = 'NA'
+#                 conf1 = 'NA'
 
-            logreg_results = pd.concat(
-                [logreg_results,
-                 pd.DataFrame({'Фактор': col, 'OR': OR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1, 'p_val': p}, index=[0])],
-                ignore_index=True)
+#             logreg_results = pd.concat(
+#                 [logreg_results,
+#                  pd.DataFrame({'Фактор': col, 'OR': OR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1, 'p_val': p}, index=[0])],
+#                 ignore_index=True)
 
-    logreg_results = logreg_results.reindex(columns=['Фактор', 'OR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
+#     logreg_results = logreg_results.reindex(columns=['Фактор', 'OR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
 
-    return logreg_results
-
+#     return logreg_results
 
 
 def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
@@ -1084,12 +1521,10 @@ def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
 
     return model_tab
 
-# +----------------------------------------------------------------------------------
-# +----------------------------------------------------------------------------------
 
-"""
-Graphics
-"""
+################################################################################
+# Graphics
+################################################################################
 
 ## Simple KDE+boxplots for numerics
 
