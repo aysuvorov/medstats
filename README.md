@@ -1,5 +1,10 @@
 # Medstats module - Python scripts
 
+**Authors / Авторы**: 
+
+- **`Suvorov Aleksandr Yu.`** - Senior biostatistician in Research Services Department of Sechenov Univercity
+- **`Vergun Maria A.`** - biostatistician in Research Services Department of Sechenov Univercity
+
 Collection of scripts and modules for biostatistics and data science simple automation for research process.
 Module uses `rpy2`-module and basic `R` libraries.
 
