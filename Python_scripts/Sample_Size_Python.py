@@ -272,33 +272,32 @@ def effect_convert(
 
         rd = p1 - p2
         rr = p1 / p2
-        or_ = (p1 / q1) / (p2 / q2)
+        or_ = (p1/q1) / (p2/q2)
         h   = 2*np.arcsin(np.sqrt(p1)) - 2*np.arcsin(np.sqrt(p2))
 
-        # --- доверительные интервалы для RD / RR / OR ----------------------
+        # ---------- доверительные интервалы --------------------------------
         se_rd   = np.sqrt(p1*q1/n1 + p2*q2/n2)
         ci_rd   = rd + np.array([-1, 1]) * zc * se_rd
 
         se_lnrr = np.sqrt(q1/(n1*p1) + q2/(n2*p2))
         ci_rr   = ratio_ci(rr, se_lnrr, conf_level)
 
-        a, b, c, d_ = p1*n1, p2*n2, q1*n1, q2*n2
-        se_lnor = np.sqrt(1/a + 1/b + 1/c + 1/d_)
-        ci_or   = ratio_ci(or_, se_lnor, conf_level)
+        a,b,c,d_ = p1*n1, p2*n2, q1*n1, q2*n2
+        se_lnor  = np.sqrt(1/a + 1/b + 1/c + 1/d_)
+        ci_or    = ratio_ci(or_, se_lnor, conf_level)
 
-        # --------- NEW: Cohen d из OR  + его CI ----------------------------
+        # ---------- новый расчёт Cohen's d ---------------------------------
         d_prop   = conv_or_to_d(or_)
-        ci_dprop = {side: conv_or_to_d(val) for side, val in ci_or.items()}
+        ci_dprop = {k: conv_or_to_d(v) for k, v in ci_or.items()}
         # -------------------------------------------------------------------
 
         rows += [
             dict(effect="risk_diff", est=rd,   ci_lo=ci_rd[0],   ci_hi=ci_rd[1]),
             dict(effect="RR",        est=rr,   ci_lo=ci_rr["lo"],ci_hi=ci_rr["hi"]),
             dict(effect="OR",        est=or_,  ci_lo=ci_or["lo"],ci_hi=ci_or["hi"]),
-            # ---- добавили строку для d ------------------------------------
-            dict(effect="d",         est=d_prop, ci_lo=ci_dprop["lo"],
+            dict(effect="d",         est=d_prop,                 
+                                    ci_lo=ci_dprop["lo"],
                                     ci_hi=ci_dprop["hi"]),
-            # ----------------------------------------------------------------
             dict(effect="h",         est=h,    ci_lo=np.nan,     ci_hi=np.nan),
         ]
 
