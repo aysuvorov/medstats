@@ -12,11 +12,9 @@ Module uses `rpy2`-module and basic `R` libraries.
 
 # Module contents
 
-Ниже представлено структурированное описание всех основных функций из представленного скрипта отдельно на русском и английском языках.
-
 ---
 
-#### Data preparation operations
+#### Data transformation and cleaning
 
 - **column_normalizer(df, col_lst)**:
   Converts symbols and brings string data into uniform format across specified columns. Spaces and punctuation marks are normalized, and strings can optionally be transformed into numbers if feasible.
