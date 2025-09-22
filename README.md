@@ -3,7 +3,7 @@
 Collection of scripts and modules for biostatistics and data science simple automation for research process.
 Module uses `rpy2`-module and basic `R` libraries.
 
-Коллекция скриптов и функций для биостатистики в Python. В модуле используются некоторые функции из R через `rpy2` (например, точный тест Фишера для таблиц rxk).
+Коллекция скриптов и функций для биостатистики в Python. В модуле используются некоторые функции из R через `rpy2` (например, точный тест Фишера для таблиц $r \times k$).
 
 # Module contents
 
