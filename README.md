@@ -1,4 +1,4 @@
-# Medstats module
+# Medstats module - Python scripts
 
 Collection of scripts and modules for biostatistics and data science simple automation for research process.
 Module uses `rpy2`-module and basic `R` libraries.
