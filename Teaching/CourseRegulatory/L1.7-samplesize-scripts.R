@@ -467,94 +467,236 @@ SSOR(alpha = 0.025, power = 0.90,
 
 
 ##############################################################################
-##  Number-of-events calculator for a log-rank test                         ##
-##  – one or two-sided                                                      ##
-##  – unequal allocation allowed (ratio = nT / nC)                          ##
+##  Survival analisis sample size                                           ##
 ##############################################################################
-# prerequisite utility already in the workspace:
-# zcrit <- function(conf = .95) qnorm(1 - (1 - conf) / 2)
 
-# main function --------------------------------------------------------------
 
-## tidy output formatter
-make_evt_tbl <- function(method, events, alpha, power, HR, HR0, ratio){
-  tibble(method          = method,
-         n_events        = events,
-         ratio           = ratio,
-         alpha           = alpha,
-         power           = power,
-         HR              = HR,
-         HR0             = HR0,
-         treatment_HR    = HR / HR0,
-         risk_reduction  = 1 - HR / HR0)
+library(gsDesign)
+
+# 1. Входные параметры -------------------------------------------
+alpha   <- 0.025          # односторонний уровень значимости
+power   <- 0.926          # требуемая мощность (1-beta)
+beta    <- 1 - power
+
+hr      <- 0.6667         # ожидаемое отношение рисков
+ratio   <- 1              # 1:1 (k)
+
+medC    <- 6             # медиана выживания плацебо, нед
+medT    <- 9             # медиана выживания лечения, нед  (проверка: 24/36 = 0.6667)
+
+accrual <- 18.5             # набор, нед (18,5 мес)
+follow  <- 9.75             # дополнительное наблюдение, нед (9,75 мес)
+
+# 2. Перевод медианы в интенсивность (λ = -ln(.5)/MST) -------------
+lambdaC <- -log(.5) / medC      # контроль
+lambdaT <- lambdaC * hr     # можно посчитать, но функции достаточно HR
+
+# 3. Расчёт фиксированного объёма --------------------------------
+n.fix <- nSurvival(
+      lambda1 = -log(0.5)/6,
+      lambda2 = -log(0.5)/9,
+      Ts = 18.5 + 9.75,
+      Tr = 18.5,
+      ratio = 1,
+      alpha = alpha,
+      beta = 1-0.926,
+      sided = 1
+    )
+
+n.fix
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ##############################################################################
+# ##  Number-of-events calculator for a log-rank test                         ##
+# ##  – one or two-sided                                                      ##
+# ##  – unequal allocation allowed (ratio = nT / nC)                          ##
+# ##############################################################################
+# # prerequisite utility already in the workspace:
+# # zcrit <- function(conf = .95) qnorm(1 - (1 - conf) / 2)
+
+# # main function --------------------------------------------------------------
+
+# ## tidy output formatter
+# make_evt_tbl <- function(method, events, alpha, power, HR, HR0, ratio){
+#   tibble(method          = method,
+#          n_events        = events,
+#          ratio           = ratio,
+#          alpha           = alpha,
+#          power           = power,
+#          HR              = HR,
+#          HR0             = HR0,
+#          treatment_HR    = HR / HR0,
+#          risk_reduction  = 1 - HR / HR0)
+# }
+
+# ##############################################################################
+# #  USER FUNCTION  ------------------------------------------------------------
+# ##############################################################################
+# SSEvents <- function(alpha = 0.05,
+#                      power = 0.80,
+#                      sided = c("two", "one"),
+#                      tail  = c("upper", "lower"),
+#                      groups = c("one", "two"),
+#                      # ---- effect definition --------------------------------
+#                      HR      = NULL, HR0 = 1,
+#                      mst_t   = NULL, mst_c = NULL,   # optional, derive HR
+#                      ratio   = 1,                    # nT / nC  (k)
+#                      inflate = 1){                   # optional inflation
+
+#   sided  <- match.arg(sided)
+#   tail   <- match.arg(tail)
+#   groups <- match.arg(groups)
+
+#   if (!is.null(HR) && (HR <= 0)) stop("HR must be > 0.")
+#   if (HR0 <= 0) stop("HR0 must be > 0.")
+
+#   ## ── derive HR from two medians if needed ---------------------------------
+#   if (is.null(HR)){
+#     if (is.null(mst_t) || is.null(mst_c))
+#       stop("Supply HR, or both mst_t and mst_c.")
+#     HR <- mst_c / mst_t                         # since λ ∝ 1/MST
+#   }
+#   if (HR == HR0) stop("No effect: HR equals HR0.")
+
+#   ## z-values ---------------------------------------------------------------
+#   z_alpha <- z_alpha_val(alpha, sided, tail)
+#   z_beta  <- qnorm(power)                       # positive
+
+#   log_delta <- log(HR / HR0)                    # effect on ln scale
+
+#   ## events -----------------------------------------------------------------
+#   if (groups == "one"){
+#     events <- (z_alpha + z_beta)^2 / log_delta^2
+#   } else {
+#     k      <- ratio
+#     events <- ((1 + k)^2 / (k * log_delta^2)) * (z_alpha + z_beta)^2
+#   }
+#   events <- ceiling(events * inflate)
+
+#   make_evt_tbl(ifelse(groups == "one", "HR-1arm", "HR-2arm"),
+#                events, alpha, power, HR, HR0, ratio)
+# }
+
+# ##############################################################################
+# ##  EXAMPLES  ── reproduce 191 vs 282 discussion                            ##
+# ##############################################################################
+
+# # A) original slide numbers  (HR = 0.67 from 36 vs 24 months, one-sided)
+# SSEvents(alpha = 0.025, power = 0.80,
+#          sided = "one", tail = "lower",
+#          groups = "two", ratio = 1,
+#          mst_t = 36, mst_c = 24)
+# #> # A tibble: 1 × 8
+# #>   method  n_events ratio alpha power    HR  HR0 treatment_HR risk_reduction
+# #>   <chr>      <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>       <dbl>          <dbl>
+# #> 1 HR-2arm      191     1 0.025    0.8 0.667     1       0.667          0.333
+
+# # B) to reach 282 events at same α/power you could, for instance,
+# #    assume HR = 0.63 (stronger effect)
+# SSEvents(alpha = 0.025, power = 0.80,
+#          sided = "one", tail = "lower",
+#          groups = "two", ratio = 1,
+#          HR = 0.63)
+# #> n_events ≈ 282
+
+##############################################################################
+# Generic permutation test
+##############################################################################
+
+perm_test <- function(data,
+                      group,
+                      stat_fun,                  # user-supplied statistic function
+                      R           = 9999,        # # permutations
+                      alternative = c("two.sided", "less", "greater"),
+                      seed        = NULL,
+                      ...)                         # extra args forwarded to stat_fun
+{
+  alternative <- match.arg(alternative)
+
+  if (!is.null(seed)) set.seed(seed)
+
+  # ------------------------------------------------------------------
+  # 1. Observed statistic
+  # ------------------------------------------------------------------
+  T_obs <- stat_fun(data, group, ...)
+
+  if (length(T_obs) != 1 || !is.numeric(T_obs))
+    stop("stat_fun must return ONE numeric value")
+
+  # ------------------------------------------------------------------
+  # 2. Permutation loop
+  # ------------------------------------------------------------------
+  perm_stats <- numeric(R)
+  for (i in seq_len(R)) {
+    perm_group      <- sample(group, length(group), replace = FALSE)  # shuffle labels
+    perm_stats[i]   <- stat_fun(data, perm_group, ...)
+  }
+
+  # ------------------------------------------------------------------
+  # 3. P-value (add +1 so it can never be zero)
+  # ------------------------------------------------------------------
+  p_val <- switch(alternative,
+                  two.sided = (sum(abs(perm_stats) >= abs(T_obs)) + 1) / (R + 1),
+                  greater   = (sum(perm_stats  >=      T_obs)  + 1) / (R + 1),
+                  less      = (sum(perm_stats  <=      T_obs)  + 1) / (R + 1))
+
+  # ------------------------------------------------------------------
+  # 4. Return a nice object
+  # ------------------------------------------------------------------
+  out <- list(statistic   = T_obs,
+              perm_stats  = perm_stats,
+              p.value     = p_val,
+              alternative = alternative,
+              R           = R,
+              call        = match.call())
+  class(out) <- "perm_test"
+  return(out)
 }
 
-##############################################################################
-#  USER FUNCTION  ------------------------------------------------------------
-##############################################################################
-SSEvents <- function(alpha = 0.05,
-                     power = 0.80,
-                     sided = c("two", "one"),
-                     tail  = c("upper", "lower"),
-                     groups = c("one", "two"),
-                     # ---- effect definition --------------------------------
-                     HR      = NULL, HR0 = 1,
-                     mst_t   = NULL, mst_c = NULL,   # optional, derive HR
-                     ratio   = 1,                    # nT / nC  (k)
-                     inflate = 1){                   # optional inflation
-
-  sided  <- match.arg(sided)
-  tail   <- match.arg(tail)
-  groups <- match.arg(groups)
-
-  if (!is.null(HR) && (HR <= 0)) stop("HR must be > 0.")
-  if (HR0 <= 0) stop("HR0 must be > 0.")
-
-  ## ── derive HR from two medians if needed ---------------------------------
-  if (is.null(HR)){
-    if (is.null(mst_t) || is.null(mst_c))
-      stop("Supply HR, or both mst_t and mst_c.")
-    HR <- mst_c / mst_t                         # since λ ∝ 1/MST
-  }
-  if (HR == HR0) stop("No effect: HR equals HR0.")
-
-  ## z-values ---------------------------------------------------------------
-  z_alpha <- z_alpha_val(alpha, sided, tail)
-  z_beta  <- qnorm(power)                       # positive
-
-  log_delta <- log(HR / HR0)                    # effect on ln scale
-
-  ## events -----------------------------------------------------------------
-  if (groups == "one"){
-    events <- (z_alpha + z_beta)^2 / log_delta^2
-  } else {
-    k      <- ratio
-    events <- ((1 + k)^2 / (k * log_delta^2)) * (z_alpha + z_beta)^2
-  }
-  events <- ceiling(events * inflate)
-
-  make_evt_tbl(ifelse(groups == "one", "HR-1arm", "HR-2arm"),
-               events, alpha, power, HR, HR0, ratio)
+# --------------------------------------------------------------------
+# Optional print / plot methods
+# --------------------------------------------------------------------
+print.perm_test <- function(x, ...) {
+  cat("Permutation test\n")
+  cat("  Statistic    :", x$statistic, "\n")
+  cat("  p-value      :", x$p.value,   "\n")
+  cat("  Alternative  :", x$alternative, "\n")
+  invisible(x)
 }
 
-##############################################################################
-##  EXAMPLES  ── reproduce 191 vs 282 discussion                             ##
-##############################################################################
+plot.perm_test <- function(x, ...) {
+  hist(x$perm_stats, breaks = "FD",
+       main = "Permutation distribution",
+       xlab = "Statistic", col = "#9ecae1", border = "white")
+  abline(v = x$statistic, col = "red", lwd = 2)
+  legend("topright", legend = "Observed", col = "red", lwd = 2, bty = "n")
+  invisible(x)
+}
 
-# A) original slide numbers  (HR = 0.67 from 36 vs 24 months, one-sided)
-SSEvents(alpha = 0.025, power = 0.80,
-         sided = "one", tail = "lower",
-         groups = "two", ratio = 1,
-         mst_t = 36, mst_c = 24)
-#> # A tibble: 1 × 8
-#>   method  n_events ratio alpha power    HR  HR0 treatment_HR risk_reduction
-#>   <chr>      <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>       <dbl>          <dbl>
-#> 1 HR-2arm      191     1 0.025    0.8 0.667     1       0.667          0.333
+set.seed(1)
+x <- rnorm(2000/2, 0)
+y <- rnorm(2500/2, 0.1)
 
-# B) to reach 282 events at same α/power you could, for instance,
-#    assume HR = 0.63 (stronger effect)
-SSEvents(alpha = 0.025, power = 0.80,
-         sided = "one", tail = "lower",
-         groups = "two", ratio = 1,
-         HR = 0.63)
-#> n_events ≈ 282
+hist(x)
+
+dat   <- c(x, y)
+group <- factor(rep(c("x","y"), c(length(x), length(y))))
+
+mean_diff <- function(d, g) {
+  tapply(d, g, mean)[2] - tapply(d, g, mean)[1]
+}
+
+test <- perm_test(dat, group, mean_diff, R = 9999, seed = 20)
+test$p.value     # должно быть что-то мелкое (~0.02)
+print(test)
