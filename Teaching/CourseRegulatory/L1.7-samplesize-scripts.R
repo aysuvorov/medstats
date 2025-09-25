@@ -40,38 +40,64 @@ ratio_ci <- function(est, se, conf = .95){
     hi = exp(log(est) + zc * se))
 }
 
+cohen_d_ci <- function(d, n1, n2 = NULL, paired = FALSE,
+                       conf.level = .95)
+{
+  if (is.null(n2) || paired) {                 # one-sample or paired
+    n  <- n1
+    se <- if (n > 2) sqrt(1/n + d^2 / (2*(n - 1))) else NA
+  } else {                                     # two independent groups
+    se <- if (n1 + n2 > 2)
+            sqrt((n1 + n2)/(n1*n2) + d^2 / (2*(n1 + n2 - 2)))
+          else NA
+  }
+
+  z  <- qnorm(1 - (1 - conf.level)/2)
+  ci <- if (!is.na(se)) d + c(-1, 1) * z * se else c(NA, NA)
+  c(ci.lo = ci[1], ci.hi = ci[2])
+}
+
+
 ##############################################################################
 #  1.  EFFECT-SIZE CONVERTER  (returns list: $input + $effects)            ###
 ##############################################################################
 effect_convert <- function(
         groups      = c("one", "two"),
-        paired      = FALSE,                 # only matters for groups == "two"
-        # ONE (and only one) of the following stats --------------------------
+        paired      = FALSE,
         rho         = NULL,
         proportion  = NULL,
         prop1       = NULL, prop2 = NULL,
         OR          = NULL, OR_lo = NULL, OR_hi = NULL,
         RR          = NULL, RR_lo = NULL, RR_hi = NULL,
-        d           = NULL,                        # Cohen d
-        mean        = NULL, sd = NULL,             # one group or paired diff
-        mean1       = NULL, mean2 = NULL,          # two groups
+        d           = NULL,
+        mean        = NULL, sd = NULL,
+        mean1       = NULL, mean2 = NULL,
         sd1         = NULL,  sd2  = NULL,
-        rho_paired  = NULL,                        # corr for paired means
-        # sample sizes --------------------------------------------------------
+        rho_paired  = NULL,
         n           = NULL,
         n1          = NULL, n2 = NULL,
-        conf.level  = .95){
+        conf.level  = .95)
+{
+  ## ── 0. detect groups if user forgot to set it ---------------------------
+  # if (missing(groups)) {
+  #   groups <- if (!is.null(n2)) "two" else "one"
+  # }
+  groups <- match.arg(groups)
 
-  groups  <- match.arg(groups)
+  if (groups == "one" && !is.null(n2)) {
+    groups <- "two"
+  }
+
+  ## ── 1. check exactly ONE primary statistic -----------------------------
   primary <- list(rho, proportion, prop1, OR, RR, d, mean, mean1)
   if (sum(!vapply(primary, is.null, FALSE)) != 1)
     stop("Supply exactly ONE primary statistic")
 
-  # harmonise n ---------------------------------------------------------------
-  if (groups == "one"){
+  ## ── 2. harmonise sample sizes ------------------------------------------
+  if (groups == "one") {
     if (is.null(n) && is.null(n1))
       stop("Need `n` for one-group input")
-    n1 <- ifelse(is.null(n1), n, n1); n2 <- NA
+    n1 <- ifelse(is.null(n1), n, n1);  n2 <- NA
   } else {
     if (is.null(n1) || is.null(n2))
       stop("Need `n1` and `n2` for two-group input")
@@ -79,7 +105,7 @@ effect_convert <- function(
   Ntot  <- ifelse(is.na(n2), n1, n1 + n2)
   ratio <- ifelse(is.na(n2), NA, n2 / n1)
 
-  zc <- zcrit(conf.level)
+  zc  <- zcrit(conf.level)
   out <- list()
 
   # ‑- a) correlation ---------------------------------------------------------
@@ -112,95 +138,103 @@ effect_convert <- function(
              ci_hi  = c(ci_p[2], NA)))
   }
 
-  # ‑- c) two proportions -----------------------------------------------------
-  if (!is.null(prop1)){
-    if (groups != "two") stop("`prop1`/`prop2` require two groups")
-    p1 <- prop1; p2 <- prop2; q1 <- 1 - p1; q2 <- 1 - p2
-    rd <- p1 - p2
-    rr <- p1 / p2
-    or <- (p1 / q1) / (p2 / q2)
-    h  <- 2 * asin(sqrt(p1)) - 2 * asin(sqrt(p2))
+  # ­- c) two proportions -------------------------------------------------
+  if (!is.null(prop1)){                         # groups must be "two"
+    if (groups != "two")
+      stop("`prop1`/`prop2` require two groups")
 
-    se_rd  <- sqrt(p1 * q1 / n1 + p2 * q2 / n2)
-    ci_rd  <- rd + c(-1, 1) * zc * se_rd
+    p1 <- prop1;  p2 <- prop2
+    q1 <- 1 - p1; q2 <- 1 - p2
 
-    se_lnrr <- sqrt(q1/(n1 * p1) + q2/(n2 * p2))
+    rd <- p1 - p2                  # risk difference
+    rr <- p1 / p2                  # risk ratio
+    or <- (p1 / q1) / (p2 / q2)    # odds ratio
+    h  <- 2*asin(sqrt(p1)) - 2*asin(sqrt(p2))  # Cohen's h (arcsine)
+
+    ## --- Wald SE + CI for each primary ratio -----------------------------
+    se_rd   <- sqrt(p1*q1/n1 + p2*q2/n2)
+    ci_rd   <- rd + c(-1,1)*zc*se_rd
+
+    se_lnrr <- sqrt(q1/(n1*p1) + q2/(n2*p2))
     ci_rr   <- ratio_ci(rr, se_lnrr, conf.level)
 
-    a <- p1 * n1; b <- p2 * n2; c <- q1 * n1; d_ <- q2 * n2
+    a <- p1*n1; b <- p2*n2; c <- q1*n1; d_ <- q2*n2
     se_lnor <- sqrt(1/a + 1/b + 1/c + 1/d_)
-    ci_or   <- ratio_ci(or, se_lnor, conf.level)
+    ci_or   <- ratio_ci(or, se_lnor, conf.level)   # LOG-scale Wald CI
 
+    ## --- convert OR  →  d → r → R²/η²  (+ propagate CI) ------------------
+    d_est    <- conv_or_to_d(or)
+    ci_d     <- conv_or_to_d(ci_or)
+    r_est    <- conv_d_to_r(d_est)
+    ci_r     <- conv_d_to_r(ci_d)
+    R2_est   <- r_est^2
+    ci_R2    <- sort(ci_r^2)       # keep ascending order
+    eta2_est <- R2_est             # identical for 2-groups
+
+    ## --- assemble tibble -------------------------------------------------
     out <- bind_rows(out,
-      tibble(effect = c("risk_diff", "RR", "OR", "h"),
-             est    = c(rd, rr, or, h),
-             ci_lo  = c(ci_rd[1], ci_rr[1], ci_or[1], NA),
-             ci_hi  = c(ci_rd[2], ci_rr[2], ci_or[2], NA)))
+      tibble(effect = c("risk_diff", "RR", "OR", "h",
+                        "d", "r", "R2", "eta2"),
+            est    = c(rd, rr, or, h,
+                        d_est, r_est, R2_est, eta2_est),
+            ci_lo  = c(ci_rd[1],  ci_rr[1],  ci_or[1],  NA,
+                        ci_d[1],   ci_r[1],   ci_R2[1],  ci_R2[1]),
+            ci_hi  = c(ci_rd[2],  ci_rr[2],  ci_or[2],  NA,
+                        ci_d[2],   ci_r[2],   ci_R2[2],  ci_R2[2])))
   }
 
-  # ‑- d) odds ratio supplied -------------------------------------------------
-  if (!is.null(OR) && is.null(prop1)){
-    or <- OR
-    d  <- conv_or_to_d(or)
-    r  <- conv_d_to_r(d)
-    R2 <- r^2; eta2 <- R2
-    ci_or <- if (!is.null(OR_lo)) c(lo = OR_lo, hi = OR_hi) else c(NA, NA)
-    ci_d  <- if (!is.na(ci_or[1])) conv_or_to_d(ci_or) else c(NA, NA)
-    ci_r  <- if (!is.na(ci_or[1])) conv_d_to_r(ci_d)   else c(NA, NA)
-    out <- bind_rows(out,
-      tibble(effect = c("OR", "d", "r", "R2", "eta2"),
-             est    = c(or,  d,  r,  R2,    eta2),
-             ci_lo  = c(ci_or[1], ci_d[1], ci_r[1], NA, NA),
-             ci_hi  = c(ci_or[2], ci_d[2], ci_r[2], NA, NA)))
-  }
+  ## ── f) RAW MEANS / SDs  →  Cohen d  (with CI propagation) --------------
+  if (!is.null(mean) || !is.null(mean1) || !is.null(d)) {
 
-  # ‑- e) risk ratio supplied -------------------------------------------------
-  if (!is.null(RR) && is.null(OR) && is.null(prop1)){
-    rr <- RR
-    d  <- conv_or_to_d(rr)                # approx. mapping
-    r  <- conv_d_to_r(d)
-    R2 <- r^2; eta2 <- R2
-    ci_rr <- if (!is.null(RR_lo)) c(lo = RR_lo, hi = RR_hi) else c(NA, NA)
-    ci_d  <- if (!is.na(ci_rr[1])) conv_or_to_d(ci_rr) else c(NA, NA)
-    ci_r  <- if (!is.na(ci_rr[1])) conv_d_to_r(ci_d)   else c(NA, NA)
-    out <- bind_rows(out,
-      tibble(effect = c("RR", "d", "r", "R2", "eta2"),
-             est    = c(rr,  d,  r,  R2,    eta2),
-             ci_lo  = c(ci_rr[1], ci_d[1], ci_r[1], NA, NA),
-             ci_hi  = c(ci_rr[2], ci_d[2], ci_r[2], NA, NA)))
-  }
-
-  # ‑- f) raw means / SDs  ----------------------------------------------------
-  if (!is.null(mean) || !is.null(mean1) || !is.null(d)){
-    if (!is.null(d)){
+    ## 1. point estimate ----------------------------------------------------
+    if (!is.null(d)) {
       d_calc <- d
-    } else if (groups == "one"){
+    } else if (groups == "one") {
       if (any(is.null(c(mean, sd))))
         stop("Need mean & sd for one-sample effect")
       d_calc <- mean / sd
-    } else if (paired){
+    } else if (paired) {
       if (any(is.null(c(mean1, mean2, sd1, sd2))))
         stop("Need mean1/2 & sd1/2 for paired design")
       if (is.null(rho_paired))
         stop("Provide `rho_paired` for paired design")
-      sd_diff <- sqrt(sd1^2 + sd2^2 - 2 * rho_paired * sd1 * sd2)
-      d_calc <- (mean1 - mean2) / sd_diff
-    } else {
+      sd_diff <- sqrt(sd1^2 + sd2^2 - 2*rho_paired*sd1*sd2)
+      d_calc  <- (mean1 - mean2) / sd_diff
+    } else {                            # two independent
       if (any(is.null(c(mean1, mean2, sd1, sd2))))
         stop("Need mean1/2 & sd1/2 for two-sample design")
-      sp <- sqrt((sd1^2 + sd2^2) / 2)
+      sp     <- sqrt((sd1^2 + sd2^2)/2)
       d_calc <- (mean1 - mean2) / sp
     }
-    r  <- conv_d_to_r(d_calc)
-    or <- conv_d_to_or(d_calc)
-    R2 <- r^2; eta2 <- R2
+
+    ## 2. 95 % CI for d -----------------------------------------------------
+    ci_vec <- cohen_d_ci(d_calc,
+                        n1     = n1,
+                        n2     = if (groups == "two" && !paired) n2 else NULL,
+                        paired = (groups == "two" &&  paired),
+                        conf.level = conf.level)
+
+    ci_d <- sort(ci_vec[c("ci.lo", "ci.hi")]) 
+
+    ## 3. propagate CI to r, OR, R2, eta2 -----------------------------------
+    ci_r  <- conv_d_to_r(ci_d)
+    ci_or <- conv_d_to_or(ci_d)
+    ci_R2 <- range(ci_r^2)   # keep order even if r could be negative
+
+    ## 4. point estimates ---------------------------------------------------
+    r   <- conv_d_to_r(d_calc)
+    or  <- conv_d_to_or(d_calc)
+    R2  <- r^2;  eta2 <- R2
+
     out <- bind_rows(out,
       tibble(effect = c("d", "r", "OR", "R2", "eta2"),
-             est    = c(d_calc, r, or, R2, eta2),
-             ci_lo  = NA, ci_hi = NA))
+             est    = c(d_calc, r, or,  R2,  eta2),
+             ci_lo  = c(ci_d["ci.lo"],  ci_r[1], ci_or[1], ci_R2[1], ci_R2[1]),
+             ci_hi  = c(ci_d["ci.hi"],  ci_r[2], ci_or[2], ci_R2[2], ci_R2[2])))
   }
 
-  effects <- arrange(out, effect)
+  ## -----------------------------------------------------------------------
+  effects <- dplyr::arrange(out, effect)
 
   list(
     input   = list(groups = groups, paired = paired,
@@ -505,7 +539,17 @@ n.fix <- nSurvival(
 
 n.fix
 
+##############################################################################
+options(scipen = 999)
 
+p = c(0.3, 0.03, 0.003, 0.0003)
+p.adjust.methods = c("bonferroni","holm", "hochberg", "hommel",  "BH", "BY",
+  "fdr", "none")
+
+for (method in p.adjust.methods) {
+  print(method)
+  print(p.adjust(p, method = method, n = length(p)) |> round(5))
+}
 
 
 
@@ -685,10 +729,8 @@ plot.perm_test <- function(x, ...) {
 }
 
 set.seed(1)
-x <- rnorm(2000/2, 0)
-y <- rnorm(2500/2, 0.1)
-
-hist(x)
+x <- rnorm(100, 0)
+y <- rnorm(100, 0.1)
 
 dat   <- c(x, y)
 group <- factor(rep(c("x","y"), c(length(x), length(y))))
@@ -700,3 +742,21 @@ mean_diff <- function(d, g) {
 test <- perm_test(dat, group, mean_diff, R = 9999, seed = 20)
 test$p.value     # должно быть что-то мелкое (~0.02)
 print(test)
+
+
+##############################################################################
+# Effect size
+##############################################################################
+
+effect_convert(n1= 100, d = .5)
+
+
+effect_convert(groups = 'two',        mean1       = 0, mean2 = 1,          # two groups
+        sd1         = 1,  sd2  = 1,n1= 100, n2 = 100)
+
+effect_convert(
+  groups = 'two',       
+  prop1       = .5, 
+  prop2 = .1,
+  n1= 100, 
+  n2 = 1000)
