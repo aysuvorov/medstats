@@ -17,6 +17,7 @@
 # # Analysts working with clinical trials may employ it to assess the reliability of their findings by estimating confidence intervals around key parameters.
 # # Students learning about statistical inference will find its examples instructive for understanding how effect sizes are calculated and interpreted.
 
+import math
 import numpy as np
 import pandas as pd
 from scipy.stats import norm, t as t_dist, nct
@@ -731,3 +732,80 @@ def ss_or(alpha=.05,
                             rr=rr,
                             or_=OR,
                             d=d)
+
+###############################################################################
+# Sensitivity and Specificity
+###############################################################################
+
+# ---------------------------------------------------------------------------
+# Buderer approach 2 classes
+
+def buderer_binary(sens, spec, prev, w_half, z=1.96):
+    """
+    Buderer 1996 sample-size formula (Wald CI) for ONE binary test.
+    https://onlinelibrary.wiley.com/doi/epdf/10.1111/j.1553-2712.1996.tb03538.x
+
+    Parameters
+    ----------
+    sens, spec : expected sensitivity and specificity (floats)
+    prev       : prevalence of the positive class (float)
+    w_half     : desired half-width of the 95 % CI (i.e. ±w_half)  !!!
+    z          : 1.96 for 95 % CI, 2.58 for 99 %, …
+
+    Returns
+    -------
+    n_diseased   : number of positive subjects required (TP+FN)
+    n_nondisease : number of negative subjects required (FP+TN)
+    n_total      : total sample size  = max(n_diseased/prev,
+                                            n_nondisease/(1-prev))
+                                            
+    # ----------------- reproduce the SAS example --------------------------
+    sn, sp, p, w_half = 0.90, 0.85, 0.20, 0.10      # w_half NOT total width
+    d, h, n_tot = buderer_binary(sn, sp, p, w_half)
+    
+    print(f"Sensitivity positives needed (D) : {d}")    # 173
+    print(f"Specificity negatives needed (H) : {h}")    #  62
+    print(f"Total sample size               : {n_tot}") # 173
+                                            
+    """
+    # step 2 & 4 in Buderer
+    d = z**2 * sens * (1 - sens) / w_half**2
+    h = z**2 * spec * (1 - spec) / w_half**2
+
+    # step 3 & 5
+    n1 = math.ceil(d / prev)         # sample size driven by sensitivity
+    n2 = math.ceil(h / (1 - prev))   # sample size driven by specificity
+
+    n_total = max(n1, n2)
+    return math.ceil(d), math.ceil(h), n_total
+
+# ---------------------------------------------------------------------------
+# Buderer approach - multiclass
+
+def buderer_multiclass(sens_list, spec_list, prev_list, w_half, z=1.96,
+                       val_frac=0.20, class_names=None):
+    """
+    Apply Buderer to each class (class vs. rest) and return the
+    validation-set size that satisfies ALL classes.
+
+    Returns a DataFrame plus N_val, N_total (if you keep only a fraction
+    `val_frac` aside for final validation).
+    """
+    if class_names is None:
+        class_names = [f"class_{i+1}" for i in range(len(sens_list))]
+
+    rows, n_val_candidates = [], []
+    for cls, Se, Sp, p in zip(class_names, sens_list, spec_list, prev_list):
+        D, H, N_val_cls = buderer_binary(Se, Sp, p, w_half, z)
+        rows.append({"class"         : cls,
+                     "prevalence"    : p,
+                     "D (positives)" : D,
+                     "H (negatives)" : H,
+                     "N_val_required": N_val_cls})
+        n_val_candidates.append(N_val_cls)
+
+    N_val   = max(n_val_candidates)
+    N_total = math.ceil(N_val / val_frac)
+    df      = pd.DataFrame(rows)
+    return df, N_val, N_total
+
