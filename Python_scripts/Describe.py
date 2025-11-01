@@ -1,10 +1,14 @@
 
 # Core Libraries
 import numpy as np
+import re
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List
+from sklearn.experimental import enable_iterative_imputer 
+from sklearn.impute import IterativeImputer, SimpleImputer
+from sklearn.linear_model import BayesianRidge
 
 # Scientific Computing and Statistics
 from scipy import stats
@@ -12,6 +16,7 @@ from scipy.stats import (
     norm, t as t_dist, nct, ttest_ind, shapiro, kstest, mannwhitneyu,
     fisher_exact, chi2_contingency, kruskal, wilcoxon, f_oneway
 )
+from pandas.api.types import CategoricalDtype
 from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.stats.proportion import proportion_confint
@@ -378,6 +383,7 @@ def smart_imputer(df: pd.DataFrame,
     if cat_targets:
         imp_cat = SimpleImputer(strategy="most_frequent")
         out[cat_targets] = imp_cat.fit_transform(out[cat_targets])
+    return out
 
 
 # +-----------------------------------------------------------------------------
@@ -961,7 +967,7 @@ def pairwise_comparisons(
             if p_adjust_method.lower() != "none":
                 valid_idx = [i for i, p in enumerate(p_raw) if not np.isnan(p)]
                 if valid_idx:
-                    adj = multitest.multipletests(
+                    adj = multipletests(
                         [p_raw[i] for i in valid_idx],
                         method=p_adjust_method.lower()
                     )[1]
@@ -1824,18 +1830,4 @@ def polar_plot_circular(
 
     if save:
         plt.savefig(figname + ".png")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
