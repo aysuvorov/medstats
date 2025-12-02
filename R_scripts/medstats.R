@@ -429,38 +429,6 @@ shapiro_safe_p = function(x) {
 
 table_shapiro = function(data) {
   
-  # df %>% select(where(is.numeric)) %>%
-  #   summarise_all(.funs = funs(p.value = shapiro.test(.)$p.value)) %>% t()
-  # 
-  # sh_name = c()
-  # sh_p = c()
-  # 
-  # for (col in seq(length(colnames(data)))) {
-  #   if (unname(sapply(data[col], class)) == 'numeric') {
-  #     sh_name = c(sh_name, colnames(data[col]))
-  #     sh_p = c(sh_p, round(shapiro_safe_p(unlist(data[,col])), 3))
-  #     
-  #   } else {
-  #     sh_name = c(sh_name, colnames(data[col]))
-  #     sh_p = NA
-  #   }
-  # }
-  # sh_df = cbind.data.frame(sh_name, sh_p)
-  # colnames(sh_df) = c('Var', 'Shapiro_test_p')
-  # return(sh_df)
-
-  # UNSAFE
-
-  # sh_df = data %>% select(where(is.numeric)) %>%
-  #   summarise_all(.funs = funs(p.value = shapiro.test(.)$p.value)) %>% t() %>%
-  #   as.data.frame()
-  # #sh_df$Var = columns_printer(gsub('.{8}$', '', rownames(sh_df)))
-  # sh_df$Var = columns_printer(colnames(data %>% select(where(is.numeric))))
-  # sh_df$Shapiro_test_p = sh_df$V1
-  # return(sh_df[c('Var', 'Shapiro_test_p')])
-
-  # SAFE
-
     sh_df = data %>% select(where(is.numeric)) %>%
     summarise_all(.funs = funs(p.value = shapiro_safe_p(.))) %>% t() %>%
     as.data.frame()
@@ -477,53 +445,169 @@ table_shapiro = function(data) {
 # Produces table with Var, valid_N, mean+sd, median[iqr], shapiro_test_p value
 # Can be saved via writexl
 
-summary_all = function(
-    data, digits = 1) {
+summary_all = function(data, digits = 1) {
+  # Initialize result data frame
+  result_df <- data.frame()
+  row_index <- 1
   
-  # calculates shapiro tests for numeric data
-  shap_df = table_shapiro(data)
+  # Process each variable in the dataset
+  for (var_name in names(data)) {
+    var_data <- data[[var_name]]
+    
+    # Get number of non-missing values
+    n_valid <- sum(!is.na(var_data))
+    n_total <- length(var_data)
+    perc_valid <- ifelse(n_total > 0, round(n_valid / n_total * 100, 1), 0)
+    
+    if (is.numeric(var_data)) {
+      # Handle numeric variables
+      valid_data <- na.omit(var_data)
+      
+      if (length(valid_data) == 0) {
+        # No valid data for this variable
+        mean_sd_str <- "NA ± NA"
+        median_iqr_str <- "NA [NA; NA]"
+        min_str <- "NA"
+        max_str <- "NA"
+      } else {
+        # Calculate statistics for numeric data
+        mean_val <- mean(valid_data, na.rm = TRUE)
+        sd_val <- sd(valid_data, na.rm = TRUE)
+        median_val <- median(valid_data, na.rm = TRUE)
+        q1_val <- quantile(valid_data, 0.25, na.rm = TRUE, names = FALSE)
+        q3_val <- quantile(valid_data, 0.75, na.rm = TRUE, names = FALSE)
+        min_val <- min(valid_data, na.rm = TRUE)
+        max_val <- max(valid_data, na.rm = TRUE)
+        
+        # Format strings with specified digits
+        mean_sd_str <- sprintf(paste0("%.", digits, "f ± %.", digits, "f"), 
+                               mean_val, sd_val)
+        median_iqr_str <- sprintf(paste0("%.", digits, "f [%.", digits, "f; %.", digits, "f]"), 
+                                  median_val, q1_val, q3_val)
+        min_str <- sprintf(paste0("%.", digits, "f"), min_val)
+        max_str <- sprintf(paste0("%.", digits, "f"), max_val)
+      }
+      
+      # Get Shapiro test p-value for numeric variables
+      shapiro_p <- NA
+      if (n_valid >= 3 && n_valid <= 5000) {
+        shapiro_p <- tryCatch(
+          shapiro.test(var_data)$p.value,
+          error = function(e) NA,
+          warning = function(w) NA
+        )
+      }
+      
+      # Create row for numeric variable
+      row <- data.frame(
+        Индекс = row_index,
+        Показатель = var_name,
+        Валидные_N = n_valid,
+        Абс_доля_проц = sprintf("%d (%.1f%%)", n_valid, perc_valid),
+        Среднее_ст_откл = mean_sd_str,
+        Медиана_и_размахи = median_iqr_str,
+        Мин = min_str,
+        Макс = max_str,
+        Тест_Ш_У_значимость = ifelse(is.na(shapiro_p), NA, round(shapiro_p, 3)),
+        stringsAsFactors = FALSE
+      )
+      
+      row_index <- row_index + 1
+      result_df <- rbind(result_df, row)
+      
+    } else if (is.factor(var_data) || is.character(var_data) || is.logical(var_data)) {
+      # Handle categorical variables
+      # Convert to factor if needed
+      if (is.character(var_data) || is.logical(var_data)) {
+        var_data <- as.factor(var_data)
+      }
+      
+      # Get levels
+      levels_data <- levels(var_data)
+      if (is.null(levels_data)) {
+        levels_data <- unique(na.omit(var_data))
+      }
+      
+      # Create rows for each level
+      for (i in seq_along(levels_data)) {
+        level <- levels_data[i]
+        n_level <- sum(var_data == level, na.rm = TRUE)
+        perc_level <- ifelse(n_valid > 0, round(n_level / n_valid * 100, 1), 0)
+        
+        # First row for the variable name
+        if (i == 1) {
+          row <- data.frame(
+            Индекс = row_index,
+            Показатель = var_name,
+            Валидные_N = n_valid,
+            Абс_доля_проц = sprintf("%d (%.1f%%)", n_valid, perc_valid),
+            Среднее_ст_откл = sprintf("%d (%.1f%%)", n_level, perc_level),
+            Медиана_и_размахи = "-",
+            Мин = "-",
+            Макс = "-",
+            Тест_Ш_У_значимость = NA,
+            stringsAsFactors = FALSE
+          )
+        } else {
+          # Subsequent rows for additional levels
+          row <- data.frame(
+            Индекс = row_index,
+            Показатель = "",
+            Валидные_N = "",
+            Абс_доля_проц = "",
+            Среднее_ст_откл = sprintf("%d (%.1f%%)", n_level, perc_level),
+            Медиана_и_размахи = "-",
+            Мин = "-",
+            Макс = "-",
+            Тест_Ш_У_значимость = NA,
+            stringsAsFactors = FALSE
+          )
+        }
+        
+        row_index <- row_index + 1
+        result_df <- rbind(result_df, row)
+      }
+    } else {
+      # Handle other types (dates, etc.)
+      row <- data.frame(
+        Индекс = row_index,
+        Показатель = var_name,
+        Валидные_N = n_valid,
+        Абс_доля_проц = sprintf("%d (%.1f%%)", n_valid, perc_valid),
+        Среднее_ст_откл = "-",
+        Медиана_и_размахи = "-",
+        Мин = "-",
+        Макс = "-",
+        Тест_Ш_У_значимость = NA,
+        stringsAsFactors = FALSE
+      )
+      
+      row_index <- row_index + 1
+      result_df <- rbind(result_df, row)
+    }
+  }
   
-  # Initialisation of resulting tibble
-  df = NULL
+  # Rename columns to match original format
+  colnames(result_df) <- c('Индекс', 'Показатель', 'Валидные,N', 'Абс,доля,%',
+                           'Среднее, ст.откл', 'Медиана и размахи', 'Мин', 'Макс', 
+                           'Тест Ш-У, значимость')
+  is_numeric_var <- result_df$`Показатель` != "" & 
+    !grepl("^-$", result_df$`Среднее, ст.откл`)
   
-  # calculates table with means and medians for numeric data
-  df = data %>% 
-    tbl_summary(
-      missing="no", 
-      type = list(data %>% 
-                    select(where(is.numeric)) %>% 
-                    colnames() %>% columns_printer() ~ 'continuous'),
-      digits = c(all_continuous() ~ c(0,digits,digits,digits,digits,
-                                        digits,digits,digits),
-                 all_categorical() ~ c(0,0,1)),
-      statistic = list(all_continuous() ~ "{N_nonmiss}|-|{mean} ± {sd}|{median} [{p25}; {p75}]|{min}|{max}",
-                    all_categorical() ~   "{N_nonmiss}|{n} ({p}%)|-|-|-|-")) %>% 
-    as_tibble()
+  # Translate the statistic description for numeric variables
+  for (i in which(is_numeric_var)) {
+    if (is.numeric(data[[result_df$`Показатель`[i]]])) {
+      # For numeric variables, we can apply translation if needed
+      # This is a simplified version - adjust as needed
+      result_df$`Показатель`[i] <- lex_coder(
+        result_df$`Показатель`[i],
+        c("Mean ± SD", "Median [25%; 75%]"),
+        c("Среднее ± Ст.откл.", "Медиана и [25%; 75%]")
+      )
+    }
+  }
   
-  colnames(df) = c('Var', 'Stat')
-  
-  # combines tables with shapiro test
-  df %<>% 
-    left_join(shap_df, by = 'Var')
-  
-  # creates index variable and puts variables into wright order
-  df$index = seq(length(rownames(df)))
-  df %<>% relocate(
-    index, Var, Stat, Shapiro_test_p) %>%
-    separate(
-      col = Stat, 
-      into = c("valid", "perc", "mn", 'mdn', 'min', 'max'), 
-      sep = "\\|")
-  
-  colnames(df) = c('Индекс', 'Показатель', 'Валидные,N', 'Абс,доля,%',
-                   'Среднее, ст.откл', 'Медиана и размахи', 'Мин', 'Макс', 
-                   'Тест Ш-У, значимость')
-  
-    df$`Показатель` = lex_coder(df$`Показатель`, 
-    c("Mean ± SD", "Median [25%; 75%]"), 
-    c("Среднее ± Ст.откл.", "Медиана и [25%; 75%]"))
-  
-  return(df)
+  return(result_df)
 }
 
 # +-----------------------------------------------------------------------------
