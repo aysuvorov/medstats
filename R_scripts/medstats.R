@@ -1,6 +1,6 @@
 # Main functions file
 #
-# 14-Nov-2023
+# 2-Dec-2025
 #
 # To load script run
 # source("/home/guest/Yandex.Disk/GitHub/r-medstats/medstats.R")
@@ -9,7 +9,8 @@
 #
 # env R_HOME=/usr/lib64/R radian  --NOT RUN
 # radian --r-binary=/usr/bin/R    --NOT RUN
-library(gtsummary)
+
+# library(gtsummary)
 library(rstatix)
 library(stringr)
 library(magrittr)
