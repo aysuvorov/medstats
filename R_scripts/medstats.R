@@ -503,7 +503,7 @@ summary_all = function(data, digits = 1) {
         Индекс = row_index,
         Показатель = var_name,
         Валидные_N = n_valid,
-        Абс_доля_проц = "-",  # Изменено: для количественных переменных ставим прочерк
+        Абс_доля_проц = "-",
         Среднее_ст_откл = mean_sd_str,
         Медиана_и_размахи = median_iqr_str,
         Мин = min_str,
@@ -528,41 +528,42 @@ summary_all = function(data, digits = 1) {
         levels_data <- unique(na.omit(var_data))
       }
       
+      # First row for the variable name (without data for first level)
+      row <- data.frame(
+        Индекс = row_index,
+        Показатель = var_name,
+        Валидные_N = n_valid,
+        Абс_доля_проц = "-",
+        Среднее_ст_откл = "-",
+        Медиана_и_размахи = "-",
+        Мин = "-",
+        Макс = "-",
+        Тест_Ш_У_значимость = NA,
+        stringsAsFactors = FALSE
+      )
+      
+      row_index <- row_index + 1
+      result_df <- rbind(result_df, row)
+      
       # Create rows for each level
       for (i in seq_along(levels_data)) {
         level <- levels_data[i]
         n_level <- sum(var_data == level, na.rm = TRUE)
         perc_level <- ifelse(n_valid > 0, round(n_level / n_valid * 100, 1), 0)
         
-        # First row for the variable name
-        if (i == 1) {
-          row <- data.frame(
-            Индекс = row_index,
-            Показатель = var_name,
-            Валидные_N = n_valid,
-            Абс_доля_проц = sprintf("%d (%.1f%%)", n_level, perc_level),  # Изменено: данные для первого уровня
-            Среднее_ст_откл = "-",  # Изменено: для категориальных переменных ставим прочерк
-            Медиана_и_размахи = "-",
-            Мин = "-",
-            Макс = "-",
-            Тест_Ш_У_значимость = NA,
-            stringsAsFactors = FALSE
-          )
-        } else {
-          # Subsequent rows for additional levels
-          row <- data.frame(
-            Индекс = row_index,
-            Показатель = "",
-            Валидные_N = "",
-            Абс_доля_проц = sprintf("%d (%.1f%%)", n_level, perc_level),  # Изменено: данные для каждого уровня
-            Среднее_ст_откл = "-",  # Изменено: для категориальных переменных ставим прочерк
-            Медиана_и_размахи = "-",
-            Мин = "-",
-            Макс = "-",
-            Тест_Ш_У_значимость = NA,
-            stringsAsFactors = FALSE
-          )
-        }
+        # Row for each level
+        row <- data.frame(
+          Индекс = row_index,
+          Показатель = level,  # Категория в столбце "Показатель"
+          Валидные_N = "",
+          Абс_доля_проц = sprintf("%d (%.1f%%)", n_level, perc_level),
+          Среднее_ст_откл = "-",
+          Медиана_и_размахи = "-",
+          Мин = "-",
+          Макс = "-",
+          Тест_Ш_У_значимость = NA,
+          stringsAsFactors = FALSE
+        )
         
         row_index <- row_index + 1
         result_df <- rbind(result_df, row)
@@ -573,7 +574,7 @@ summary_all = function(data, digits = 1) {
         Индекс = row_index,
         Показатель = var_name,
         Валидные_N = n_valid,
-        Абс_доля_проц = "-",  # Изменено: для некатегориальных переменных ставим прочерк
+        Абс_доля_проц = "-",
         Среднее_ст_откл = "-",
         Медиана_и_размахи = "-",
         Мин = "-",
@@ -591,21 +592,6 @@ summary_all = function(data, digits = 1) {
   colnames(result_df) <- c('Индекс', 'Показатель', 'Валидные,N', 'Абс,доля,%',
                            'Среднее, ст.откл', 'Медиана и размахи', 'Мин', 'Макс', 
                            'Тест Ш-У, значимость')
-  is_numeric_var <- result_df$`Показатель` != "" & 
-    !grepl("^-$", result_df$`Среднее, ст.откл`)
-  
-  # Translate the statistic description for numeric variables
-  for (i in which(is_numeric_var)) {
-    if (is.numeric(data[[result_df$`Показатель`[i]]])) {
-      # For numeric variables, we can apply translation if needed
-      # This is a simplified version - adjust as needed
-      result_df$`Показатель`[i] <- lex_coder(
-        result_df$`Показатель`[i],
-        c("Mean ± SD", "Median [25%; 75%]"),
-        c("Среднее ± Ст.откл.", "Медиана и [25%; 75%]")
-      )
-    }
-  }
   
   return(result_df)
 }
