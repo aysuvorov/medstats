@@ -705,29 +705,32 @@ SSMeanT <- function(alpha = 0.05, power = 0.80,
 ##############################################################################
 #  1.  PROPORTIONS            ###
 ##############################################################################
+
+make_prop_tibble <- function(method, n_trt, n_control, alpha, power,
+                               rd = NA, h = NA, rr = NA, or = NA, d = NA){
+    tibble::tibble(
+      method          = method,
+      n_treatment     = n_trt,                    # размер экспериментальной группы
+      n_control       = n_control,                # размер контрольной группы
+      total_N         = ifelse(is.na(n_control), n_trt, n_trt + n_control),
+      ratio           = ifelse(is.na(n_control), NA_real_, n_trt / n_control),
+      alpha           = alpha,
+      power           = power,
+      risk_difference = rd,
+      cohen_h         = h,
+      cohen_d         = d,
+      RR              = rr,
+      OR              = or
+    )
+  }
+
+# Вспомогательная функция для расчета z-критического значения
 z_alpha_val <- function(alpha, sided, tail){
   if (sided == "two"){
-    zcrit(conf = 1 - alpha)           # same as qnorm(1-α/2)
+    qnorm(1 - alpha / 2)
   } else {
     if (tail == "upper") qnorm(1 - alpha) else abs(qnorm(alpha))
   }
-}
-
-# tidy output formatter
-make_prop_tibble <- function(method, n1, n2, alpha, power,
-                             rd = NA, h = NA, rr = NA, or = NA, d = NA){
-  tibble(method          = method,
-         n1              = n1,
-         n2              = n2,
-         total_N         = ifelse(is.na(n2), n1, n1 + n2),
-         ratio           = ifelse(is.na(n2), NA_real_, n2 / n1),
-         alpha           = alpha,
-         power           = power,
-         risk_difference = rd,
-         cohen_h         = h,
-         cohen_d         = d,
-         RR              = rr,
-         OR              = or)
 }
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -740,50 +743,130 @@ SSProp <- function(alpha = 0.05,
                    groups = c("one", "two"),
                    # ------ one-sample inputs ------------------------------
                    p       = NULL,       # anticipated proportion
-                   epsilon = NULL,       # |p − p0|
+                   p0      = NULL,       # hypothetical proportion (for one-sample)
+                   epsilon = NULL,       # |p - p0|
                    # ------ two-sample inputs ------------------------------
-                   p1 = NULL, p2 = NULL,
-                   ratio = 1             # n2 / n1
-                   ){
-
+                   p_trt = NULL,         # proportion in treatment group
+                   p_control = NULL,     # proportion in control group
+                   # ------ Cohen's h inputs -------------------------------
+                   h = NULL,             # Cohen's h effect size
+                   # ------ shared parameters ------------------------------
+                   ratio = 1             # n_trt / n_control
+){
+  
   groups <- match.arg(groups)
   sided  <- match.arg(sided)
   tail   <- match.arg(tail)
-
+  
+  # Проверяем корректность входных параметров
+  if (groups == "one" && !is.null(h) && is.null(p0)) {
+    stop("For one-sample design with Cohen's h, supply `p0` (hypothetical proportion)")
+  }
+  
+  if (groups == "two" && !is.null(h) && is.null(p_control)) {
+    stop("For two-sample design with Cohen's h, supply `p_control` (control group proportion)")
+  }
+  
   z_a <- z_alpha_val(alpha, sided, tail)
-  z_b <- qnorm(power)                    # positive because power > 0.5
-
-  if (groups == "one"){
-    # ── one-sample ----------------------------------------------------------
-    if (is.null(p) || is.null(epsilon))
-      stop("For a one-sample design supply `p` and `epsilon`.")
-
+  z_b <- qnorm(power)  # positive because power > 0.5
+  
+  if (groups == "one") {
+    # ── one-sample (single group) ----------------------------------------------------------
+    if (!is.null(h)) {
+      # Если задан Cohen's h, вычисляем p и epsilon
+      if (is.null(p0)) stop("For one-sample design with Cohen's h, supply `p0`")
+      
+      # Вычисляем ожидаемую пропорцию p из h и p0
+      p_calc <- sin(asin(sqrt(p0)) + h/2)^2
+      p_calc <- max(0, min(1, p_calc))
+      
+      p <- p_calc
+      epsilon <- abs(p - p0)
+    } else {
+      # Используем обычные параметры
+      if (is.null(p) || (is.null(epsilon) && is.null(p0))) {
+        stop("For a one-sample design supply `p` and (`epsilon` or `p0`).")
+      }
+      
+      if (is.null(epsilon) && !is.null(p0)) {
+        epsilon <- abs(p - p0)
+      }
+    }
+    
+    # Проверяем корректность параметров
+    if (p <= 0 || p >= 1) stop("`p` must be in (0,1)")
+    if (epsilon <= 0) stop("`epsilon` must be > 0")
+    
+    # Расчет размера выборки для одной группы
     n <- ceiling(((z_a + z_b)^2 * p * (1 - p)) / epsilon^2)
-
-    make_prop_tibble("Prop-1sample", n1 = n, n2 = NA,
-                     alpha, power,
-                     rd = epsilon)
+    
+    # Расчет Cohen's h для вывода
+    h_calc <- if (!is.null(h)) h else 2 * (asin(sqrt(p)) - asin(sqrt(p0)))
+    
+    # Правильный вызов функции с именованными аргументами
+    make_prop_tibble(
+      method = "Prop-1sample", 
+      n_trt = n, 
+      n_control = NA,
+      alpha = alpha, 
+      power = power,
+      rd = epsilon,
+      h = h_calc
+    )
+    
   } else {
-    # ── two-sample ----------------------------------------------------------
-    if (is.null(p1) || is.null(p2))
-      stop("For a two-sample design supply `p1` and `p2`.")
-
-    rd  <- p1 - p2             # signed risk difference
+    # ── two-sample (treatment vs control) ----------------------------------------------------------
+    if (!is.null(h)) {
+      # Если задан Cohen's h, вычисляем p_trt из p_control
+      if (is.null(p_control)) {
+        stop("For two-sample design with Cohen's h, supply `p_control` (control group proportion)")
+      }
+      
+      # Вычисляем p_trt из h и p_control
+      p_trt_calc <- sin(asin(sqrt(p_control)) + h/2)^2
+      p_trt_calc <- max(0, min(1, p_trt_calc))
+      
+      p_trt <- p_trt_calc
+    } else {
+      # Проверяем обязательные параметры
+      if (is.null(p_trt) || is.null(p_control)) {
+        stop("For a two-sample design supply `p_trt` and `p_control` (or use Cohen's h with `p_control`).")
+      }
+    }
+    
+    # Проверяем корректность параметров
+    if (p_trt <= 0 || p_trt >= 1) stop("`p_trt` must be in (0,1)")
+    if (p_control <= 0 || p_control >= 1) stop("`p_control` must be in (0,1)")
+    
+    # Вычисляем параметры эффекта
+    rd  <- p_trt - p_control        # signed risk difference
     eps <- abs(rd)
-
-    n2 <- ((z_a + z_b)^2 / eps^2) *
-          (p1 * (1 - p1) / ratio + p2 * (1 - p2))
-    n2 <- ceiling(n2)
-    n1 <- ceiling(ratio * n2)
-
-    h  <- 2 * asin(sqrt(p1)) - 2 * asin(sqrt(p2))
-    rr <- p1 / p2
-    or <- (p1 / (1 - p1)) / (p2 / (1 - p2))
-    d <- conv_or_to_d(or)
-
-    make_prop_tibble("Prop-2sample", n1, n2,
-                     alpha, power,
-                     rd = rd, h = h, d = d, rr = rr, or = or)
+    
+    # Расчет размера выборки для двух групп
+    n_control <- ((z_a + z_b)^2 / eps^2) *
+      (p_trt * (1 - p_trt) / ratio + p_control * (1 - p_control))
+    n_control <- ceiling(n_control)
+    n_trt <- ceiling(ratio * n_control)
+    
+    # Расчет дополнительных метрик эффекта
+    h_calc  <- if (!is.null(h)) h else 2 * asin(sqrt(p_trt)) - 2 * asin(sqrt(p_control))
+    rr <- p_trt / p_control
+    or_val <- (p_trt / (1 - p_trt)) / (p_control / (1 - p_control))
+    d_val <- conv_or_to_d(or_val)
+    
+    # Правильный вызов функции с именованными аргументами
+    make_prop_tibble(
+      method = "Prop-2sample", 
+      n_trt = n_trt, 
+      n_control = n_control,
+      alpha = alpha, 
+      power = power,
+      rd = rd, 
+      h = h_calc, 
+      d = d_val, 
+      rr = rr, 
+      or = or_val
+    )
   }
 }
 
