@@ -22,6 +22,109 @@ conv_or_to_d <- function(or) {
     log(or) * sqrt(3) / pi
   }
 
+# Преобразование Cohen's d в OR
+conv_d_to_or <- function(d) {
+  exp(d * pi / sqrt(3))
+}
+
+# Преобразование Cohen's d в r
+conv_d_to_r <- function(d) {
+  d / sqrt(d^2 + 4)
+}
+
+# Преобразование Cohen's d в Cohen's h
+conv_d_to_h <- function(d) {
+  # Используем преобразование через OR
+  or <- conv_d_to_or(d)
+  log(or) * sqrt(3) / pi
+}
+
+# Преобразование Cohen's h в d
+conv_h_to_d <- function(h) {
+  # Используем преобразование через OR
+  or <- exp(h * pi / sqrt(3))
+  log(or) * sqrt(3) / pi
+}
+
+# Преобразование Cohen's h в r
+conv_h_to_r <- function(h) {
+  d <- conv_h_to_d(h)
+  conv_d_to_r(d)
+}
+
+# Преобразование r в Cohen's h
+conv_r_to_h <- function(r) {
+  d <- 2 * r / sqrt(1 - r^2)
+  conv_d_to_h(d)
+}
+
+# Функция для расчета f из R²
+calc_f <- function(r2) {
+  sqrt(r2 / (1 - r2))
+}
+
+# Функция для расчета Cohen's h для пропорций (арксинусная разность)
+cohens_h_prop <- function(p1, p2) {
+  2 * asin(sqrt(p1)) - 2 * asin(sqrt(p2))
+}
+
+# Функция для расчета Cohen's h через log(RR)
+cohens_h_logrr <- function(rr) {
+  log(rr)
+}
+
+# Функция для расчета ДИ отношения (OR, RR)
+ratio_ci <- function(est, se_log, conf.level = 0.95) {
+  z <- qnorm(1 - (1 - conf.level) / 2)
+  exp(log(est) + c(-1, 1) * z * se_log)
+}
+
+# Функция для расчета ДИ для корреляции
+r_ci <- function(r, n, conf.level = 0.95) {
+  z <- atanh(r)
+  se <- 1 / sqrt(n - 3)
+  z_crit <- qnorm(1 - (1 - conf.level) / 2)
+  ci_z <- z + c(-1, 1) * z_crit * se
+  tanh(ci_z)
+}
+
+# Функция для расчета ДИ Cohen's d (t-распределение)
+cohen_d_ci_t <- function(d, n1, n2, paired = FALSE, conf.level = 0.95) {
+  if (paired) {
+    df <- n1 - 1
+    se <- sqrt(1/n1 + d^2/(2*n1))
+  } else {
+    df <- n1 + n2 - 2
+    se <- sqrt((n1 + n2)/(n1 * n2) + d^2/(2*(n1 + n2)))
+  }
+  t_crit <- qt(1 - (1 - conf.level) / 2, df)
+  ci <- d + c(-1, 1) * t_crit * se
+  ci
+}
+
+# Функция для расчета ДИ Glass's Δ
+glass_delta_ci <- function(delta, sd_control, n1, n2, conf.level = 0.95) {
+  df <- n1 + n2 - 2
+  t_crit <- qt(1 - (1 - conf.level) / 2, df)
+  se <- sqrt((n1 + n2)/(n1 * n2) + delta^2/(2*(n1 + n2)))
+  delta + c(-1, 1) * t_crit * se
+}
+
+# Преобразование RR в OR
+conv_rr_to_or <- function(rr, base_rate) {
+  (rr * base_rate / (1 - base_rate)) / (base_rate / (1 - base_rate))
+}
+
+# Преобразование OR в RR
+conv_or_to_rr <- function(or, base_rate) {
+  or / (1 - base_rate + base_rate * or)
+}
+
+# Критическое значение t-распределения
+tcrit <- function(df, conf.level) {
+  qt(1 - (1 - conf.level) / 2, df)
+}
+
 ##############################################################################
 #  1.  КОНВЕРТЕР РАЗМЕРОВ ЭФФЕКТА (ИСПРАВЛЕННАЯ ВЕРСИЯ)                    ###
 ##############################################################################
