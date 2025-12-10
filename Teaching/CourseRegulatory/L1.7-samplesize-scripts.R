@@ -722,7 +722,8 @@ make_prop_tibble <- function(method, n_trt, n_control, alpha, power,
       RR              = rr,
       OR              = or
     )
-  }
+}
+
 
 # Вспомогательная функция для расчета z-критического значения
 z_alpha_val <- function(alpha, sided, tail){
@@ -881,215 +882,55 @@ SSOR <- function(alpha = 0.05,
                  OR,                     # alternative odds ratio to detect
                  pC,                     # event rate in control group
                  ratio = 1              # nT / nC  (k on the slide)
-                 ){
-
+){
+  
   sided <- match.arg(sided)
   tail  <- match.arg(tail)
-
+  
   conv_or_to_d <- function(or) {
     log(or) * sqrt(3) / pi
   }
-
+  
   if (OR <= 0) stop("OR must be > 0")
   if (pC <= 0 || pC >= 1) stop("pC must be in (0,1)")
-
+  
   z_a <- z_alpha_val(alpha, sided, tail)
   z_b <- qnorm(power)                     # positive because power > 0.5
-
+  
   # ---- derive event rate in treatment arm from OR and pC ------------------
   pT <- OR * pC / (1 - pC + OR * pC)
   if (pT <= 0 || pT >= 1)
     stop("Computed pT out of range; check OR and pC.")
-
+  
   # ---- base formula -------------------------------------------------------
   logOR <- log(OR)
   nC <- ((z_a + z_b)^2 / logOR^2) *
-        ( 1/(ratio * pT * (1 - pT)) + 1/(pC * (1 - pC)) )
+    ( 1/(ratio * pT * (1 - pT)) + 1/(pC * (1 - pC)) )
   nC <- ceiling(nC)
   nT <- ceiling(ratio * nC)
-
+  
   # ---- additional effect metrics -----------------------------------------
   rd <- pT - pC
   h  <- 2 * asin(sqrt(pT)) - 2 * asin(sqrt(pC))
   rr <- pT / pC
   d <- conv_or_to_d(OR)
-
-  make_prop_tibble(method = "OR-2sample",
-                   n1 = nC,              # control first
-                   n2 = nT,
-                   alpha = alpha,
-                   power = power,
-                   rd = rd,
-                   h  = h,
-                   rr = rr,
-                   or = OR,
-                   d = d)
+  
+  # ИСПРАВЛЕННЫЙ ВЫЗОВ: используем правильные имена параметров
+  # n_trt = nT (размер экспериментальной/лечебной группы)
+  # n_control = nC (размер контрольной группы)
+  make_prop_tibble(
+    method = "OR-2sample",
+    n_trt = nT,              # экспериментальная группа
+    n_control = nC,          # контрольная группа
+    alpha = alpha,
+    power = power,
+    rd = rd,
+    h = h,
+    rr = rr,
+    or = OR,
+    d = d
+  )
 }
-
-##############################################################################
-##  Quick illustration (uncomment to run)                                   ##
-##############################################################################
-# # Detect OR = 1.8,  control risk = 0.25, one-sided α = 0.025,  power 90 %
-# # 2 : 1 allocation (treatment twice the control)
-SSOR(alpha = 0.025, power = 0.90,
-     sided = "one", tail = "upper",
-     OR = .5, pC = 0.25,
-     ratio = 2)
-
-
-##############################################################################
-##  Survival analisis sample size                                           ##
-##############################################################################
-
-
-# library(gsDesign)
-
-# # 1. Входные параметры -------------------------------------------
-# alpha   <- 0.025          # односторонний уровень значимости
-# power   <- 0.926          # требуемая мощность (1-beta)
-# beta    <- 1 - power
-
-# hr      <- 0.6667         # ожидаемое отношение рисков
-# ratio   <- 1              # 1:1 (k)
-
-# medC    <- 6             # медиана выживания плацебо, нед
-# medT    <- 9             # медиана выживания лечения, нед  (проверка: 24/36 = 0.6667)
-
-# accrual <- 18.5             # набор, нед (18,5 мес)
-# follow  <- 9.75             # дополнительное наблюдение, нед (9,75 мес)
-
-# # 2. Перевод медианы в интенсивность (λ = -ln(.5)/MST) -------------
-# lambdaC <- -log(.5) / medC      # контроль
-# lambdaT <- lambdaC * hr     # можно посчитать, но функции достаточно HR
-
-# # 3. Расчёт фиксированного объёма --------------------------------
-# n.fix <- nSurvival(
-#       lambda1 = -log(0.5)/6,
-#       lambda2 = -log(0.5)/9,
-#       Ts = 18.5 + 9.75,
-#       Tr = 18.5,
-#       ratio = 1,
-#       alpha = alpha,
-#       beta = 1-0.926,
-#       sided = 1
-#     )
-
-# n.fix
-
-# ##############################################################################
-# options(scipen = 999)
-
-# p = c(0.3, 0.03, 0.003, 0.0003)
-# p.adjust.methods = c("bonferroni","holm", "hochberg", "hommel",  "BH", "BY",
-#   "fdr", "none")
-
-# for (method in p.adjust.methods) {
-#   print(method)
-#   print(p.adjust(p, method = method, n = length(p)) |> round(5))
-# }
-
-
-
-
-
-
-
-
-
-
-
-# ##############################################################################
-# ##  Number-of-events calculator for a log-rank test                         ##
-# ##  – one or two-sided                                                      ##
-# ##  – unequal allocation allowed (ratio = nT / nC)                          ##
-# ##############################################################################
-# # prerequisite utility already in the workspace:
-# # zcrit <- function(conf = .95) qnorm(1 - (1 - conf) / 2)
-
-# # main function --------------------------------------------------------------
-
-# ## tidy output formatter
-# make_evt_tbl <- function(method, events, alpha, power, HR, HR0, ratio){
-#   tibble(method          = method,
-#          n_events        = events,
-#          ratio           = ratio,
-#          alpha           = alpha,
-#          power           = power,
-#          HR              = HR,
-#          HR0             = HR0,
-#          treatment_HR    = HR / HR0,
-#          risk_reduction  = 1 - HR / HR0)
-# }
-
-# ##############################################################################
-# #  USER FUNCTION  ------------------------------------------------------------
-# ##############################################################################
-# SSEvents <- function(alpha = 0.05,
-#                      power = 0.80,
-#                      sided = c("two", "one"),
-#                      tail  = c("upper", "lower"),
-#                      groups = c("one", "two"),
-#                      # ---- effect definition --------------------------------
-#                      HR      = NULL, HR0 = 1,
-#                      mst_t   = NULL, mst_c = NULL,   # optional, derive HR
-#                      ratio   = 1,                    # nT / nC  (k)
-#                      inflate = 1){                   # optional inflation
-
-#   sided  <- match.arg(sided)
-#   tail   <- match.arg(tail)
-#   groups <- match.arg(groups)
-
-#   if (!is.null(HR) && (HR <= 0)) stop("HR must be > 0.")
-#   if (HR0 <= 0) stop("HR0 must be > 0.")
-
-#   ## ── derive HR from two medians if needed ---------------------------------
-#   if (is.null(HR)){
-#     if (is.null(mst_t) || is.null(mst_c))
-#       stop("Supply HR, or both mst_t and mst_c.")
-#     HR <- mst_c / mst_t                         # since λ ∝ 1/MST
-#   }
-#   if (HR == HR0) stop("No effect: HR equals HR0.")
-
-#   ## z-values ---------------------------------------------------------------
-#   z_alpha <- z_alpha_val(alpha, sided, tail)
-#   z_beta  <- qnorm(power)                       # positive
-
-#   log_delta <- log(HR / HR0)                    # effect on ln scale
-
-#   ## events -----------------------------------------------------------------
-#   if (groups == "one"){
-#     events <- (z_alpha + z_beta)^2 / log_delta^2
-#   } else {
-#     k      <- ratio
-#     events <- ((1 + k)^2 / (k * log_delta^2)) * (z_alpha + z_beta)^2
-#   }
-#   events <- ceiling(events * inflate)
-
-#   make_evt_tbl(ifelse(groups == "one", "HR-1arm", "HR-2arm"),
-#                events, alpha, power, HR, HR0, ratio)
-# }
-
-# ##############################################################################
-# ##  EXAMPLES  ── reproduce 191 vs 282 discussion                            ##
-# ##############################################################################
-
-# # A) original slide numbers  (HR = 0.67 from 36 vs 24 months, one-sided)
-# SSEvents(alpha = 0.025, power = 0.80,
-#          sided = "one", tail = "lower",
-#          groups = "two", ratio = 1,
-#          mst_t = 36, mst_c = 24)
-# #> # A tibble: 1 × 8
-# #>   method  n_events ratio alpha power    HR  HR0 treatment_HR risk_reduction
-# #>   <chr>      <dbl> <dbl> <dbl> <dbl> <dbl> <dbl>       <dbl>          <dbl>
-# #> 1 HR-2arm      191     1 0.025    0.8 0.667     1       0.667          0.333
-
-# # B) to reach 282 events at same α/power you could, for instance,
-# #    assume HR = 0.63 (stronger effect)
-# SSEvents(alpha = 0.025, power = 0.80,
-#          sided = "one", tail = "lower",
-#          groups = "two", ratio = 1,
-#          HR = 0.63)
-# #> n_events ≈ 282
 
 ##############################################################################
 # Generic permutation test
@@ -1145,55 +986,6 @@ perm_test <- function(data,
   return(out)
 }
 
-# --------------------------------------------------------------------
-# Optional print / plot methods
-# --------------------------------------------------------------------
-print.perm_test <- function(x, ...) {
-  cat("Permutation test\n")
-  cat("  Statistic    :", x$statistic, "\n")
-  cat("  p-value      :", x$p.value,   "\n")
-  cat("  Alternative  :", x$alternative, "\n")
-  invisible(x)
-}
-
-plot.perm_test <- function(x, ...) {
-  hist(x$perm_stats, breaks = "FD",
-       main = "Permutation distribution",
-       xlab = "Statistic", col = "#9ecae1", border = "white")
-  abline(v = x$statistic, col = "red", lwd = 2)
-  legend("topright", legend = "Observed", col = "red", lwd = 2, bty = "n")
-  invisible(x)
-}
-
-set.seed(1)
-x <- rnorm(100, 0)
-y <- rnorm(100, 0.1)
-
-dat   <- c(x, y)
-group <- factor(rep(c("x","y"), c(length(x), length(y))))
-
-mean_diff <- function(d, g) {
-  tapply(d, g, mean)[2] - tapply(d, g, mean)[1]
-}
-
-test <- perm_test(dat, group, mean_diff, R = 9999, seed = 20)
-test$p.value     # должно быть что-то мелкое (~0.02)
-print(test)
 
 
-##############################################################################
-# Effect size
-##############################################################################
 
-effect_convert(n1= 100, d = .5)
-
-
-effect_convert(groups = 'two',        mean1       = 0, mean2 = 1,          # two groups
-        sd1         = 1,  sd2  = 1,n1= 100, n2 = 100)
-
-effect_convert(
-  groups = 'two',       
-  prop1       = .5, 
-  prop2 = .1,
-  n1= 100, 
-  n2 = 1000)
