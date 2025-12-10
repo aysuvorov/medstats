@@ -886,6 +886,10 @@ SSOR <- function(alpha = 0.05,
   sided <- match.arg(sided)
   tail  <- match.arg(tail)
 
+  conv_or_to_d <- function(or) {
+    log(or) * sqrt(3) / pi
+  }
+
   if (OR <= 0) stop("OR must be > 0")
   if (pC <= 0 || pC >= 1) stop("pC must be in (0,1)")
 
