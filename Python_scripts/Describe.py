@@ -49,10 +49,9 @@ from itertools import product, combinations
 import rpy2.robjects as ro
 from rpy2.robjects.packages import importr
 from rpy2.robjects import pandas2ri, FloatVector, IntVector, FactorVector, Formula
-import rpy2.robjects.numpy2ri as rpyn
-rpyn.activate()
-stats_r = importr('stats')
-base = importr('base')
+# rpyn.activate()
+# stats_r = importr('stats')
+# base = importr('base')
 
 # Warning Management
 import warnings
@@ -594,46 +593,51 @@ def fisher_exact_r(cont: pd.DataFrame, seed=1000) -> tuple[str, float | None]:
     """
     Run Fisher's exact test via R for ANY sized contingency table with sparse cells.
     Uses simulation for larger tables to avoid computational issues.
-    
     Parameters
     ----------
     cont : pd.DataFrame - contingency table of any size (m × n)
     seed : int - random seed for reproducibility
-    
+
     Returns
     -------
     (test_name, p_value)
     """
     np.random.seed(seed)
     try:
-        import rpy2.robjects as ro
-        from rpy2.robjects import pandas2ri
         from rpy2.robjects.packages import importr
-
-        # Activate pandas-to-R conversion
-        pandas2ri.activate()
-        stats_r = importr('stats')
         
-        # Convert the contingency table to an R matrix
-        r_matrix = pandas2ri.py2rpy(cont)
+        # Используем рабочий паттерн: default_converter + pandas2ri.converter
+        converter = ro.default_converter + pandas2ri.converter
         
-        # For 2×k tables use exact method
-        if cont.shape[0] == 2:
-            result = stats_r.fisher_test(r_matrix)
-            p_value = result.rx2('p.value')[0]
-            return "Точный тест Фишера (R)", float(p_value)
-        
-        # For larger tables use Monte Carlo simulation
-        else:
-            ro.r(f'set.seed({seed})')
-            result = stats_r.fisher_test(r_matrix, simulate_p_value=True)
-            p_value = result.rx2('p.value')[0]
-            return "Точный тест Фишера (R, симуляция)", float(p_value)
+        with converter.context():
+            stats_r = importr('stats')
             
+            # Конвертируем DataFrame в R-матрицу через явный вызов py2rpy
+            r_matrix = ro.conversion.get_conversion().py2rpy(cont)
+            
+            # Для таблиц 2xk используем точный метод
+            if cont.shape[0] == 2:
+                result = stats_r.fisher_test(r_matrix)
+                p_value = result[0][0]
+                return "Точный тест Фишера (R)", float(p_value)
+            
+            # Для больших таблиц используем симуляцию Монте-Карло
+            else:
+                ro.r(f'set.seed({seed})')
+                # simulate.p.value=TRUE обязательно для таблиц > 2x2
+                result = stats_r.fisher_test(r_matrix, simulate_p_value=True, B=10000)
+                p_value = result[0][0]
+                return "Точный тест Фишера (R, симуляция)", float(p_value)
+                
     except Exception as e:
+        print(f"Ошибка при вызове R: {type(e).__name__}: {e}")
         # Fallback to chi-square with correction
-        chi2, p_val, *_ = stats.chi2_contingency(cont, correction=True)
-        return f"R не найден → Χ²-тест", p_val
+        from scipy import stats as sp_stats
+        try:
+            chi2, p_val, *_ = sp_stats.chi2_contingency(cont, correction=True)
+            return f"R не найден/ошибка → Χ²-тест", float(p_val)
+        except:
+            return "Ошибка", None
 
 
 def _shapiro_ok(x: np.ndarray) -> bool:
