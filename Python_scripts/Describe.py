@@ -91,7 +91,7 @@ RS = 1000
 #             df[col] = df[col].astype(float)
 #         except:
 #             pass
-    
+
 #     return(df)
 
 def _norm_string_array(arr):
@@ -149,22 +149,22 @@ def glimpse(df: pd.DataFrame) -> pd.DataFrame:
     """
     # Create an empty DataFrame to store the results
     result_df = pd.DataFrame(columns=['Column', 'Type', 'Valid', 'Missings', 'Missing category', 'Uniques'])
-    
+
     for col in df.columns:
         series = df[col]
-        
+
         # Determine the data type
         dtype = str(series.dtype)
-        
+
         # Count the number of missing values
         na_count = series.isna().sum()
         valid_count = len(series) - na_count
         total_rows = len(series)
         na_percentage = round(na_count / total_rows * 100, 2)
-        
+
         # Count the number of unique values
         unique_values = series.nunique()
-        
+
         # Determine the missingness category
         missing_category = ''
         if na_percentage == 0:
@@ -175,7 +175,7 @@ def glimpse(df: pd.DataFrame) -> pd.DataFrame:
             missing_category = 'Moderate'
         else:
             missing_category = 'High'
-        
+
         # Add a row to the resulting DataFrame
         new_row = pd.Series({
             'Column': col,
@@ -186,7 +186,7 @@ def glimpse(df: pd.DataFrame) -> pd.DataFrame:
             'Uniques': unique_values
         })
         result_df = pd.concat([result_df, new_row.to_frame().T], ignore_index=True)
-    
+
     return result_df
 
 
@@ -230,7 +230,7 @@ def plot_missing_by_combos(df: pd.DataFrame,
 
         # Создаем матрицу пропусков (1 = пропуск, 0 = значение есть)
         miss = block.isna().astype(int)
-        
+
         # Проверяем, есть ли пропуски в этой группе
         total_missing = miss.sum().sum()
         if total_missing == 0:
@@ -245,7 +245,7 @@ def plot_missing_by_combos(df: pd.DataFrame,
 
         # Создаем фигуру
         fig, ax = plt.subplots(figsize=figsize)
-        
+
         # Рисуем heatmap с явными параметрами
         sns.heatmap(
             miss,
@@ -260,16 +260,16 @@ def plot_missing_by_combos(df: pd.DataFrame,
             ax=ax,
             square=False  # Важно: не делать квадратные ячейки
         )
-        
+
         # Настройки осей
         ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right")
         ax.set_xlabel("Columns")
         ax.set_ylabel("Rows")
         ax.set_title(f"{title_prefix}{combo_name} (n={len(block)}, пропусков: {total_missing})")
-        
+
         # Добавляем сетку для лучшей видимости
         ax.grid(False)
-        
+
         plt.tight_layout()
         plt.show()
 
@@ -293,26 +293,26 @@ def plot_missing_by_combos_simple(df: pd.DataFrame,
     Упрощенная версия для отладки
     """
     cat_cols = [c for c in (cat_cols or []) if c in df.columns]
-    
+
     if cat_cols:
         # Группируем по категориальным переменным
         for combo, group in df.groupby(cat_cols, dropna=False):
             print(f"\nГруппа: {combo}")
             print(f"Размер: {len(group)} строк")
-            
+
             # Создаем матрицу пропусков
             miss = group.isna().astype(int)
             total_missing = miss.sum().sum()
-            
+
             if total_missing > 0:
                 fig, ax = plt.subplots(figsize=figsize)
-                sns.heatmap(miss, cmap=['#BDBDBD', '#d62728'], 
+                sns.heatmap(miss, cmap=['#BDBDBD', '#d62728'],
                            cbar=False, yticklabels=False)
                 ax.set_title(f"Group: {combo} (missing: {total_missing})")
                 plt.xticks(rotation=45)
                 plt.tight_layout()
                 plt.show()
-                
+
                 print("Пропуски по столбцам:")
                 print(group.isna().sum())
             else:
@@ -321,15 +321,15 @@ def plot_missing_by_combos_simple(df: pd.DataFrame,
         # Без группировки
         miss = df.isna().astype(int)
         total_missing = miss.sum().sum()
-        
+
         fig, ax = plt.subplots(figsize=figsize)
-        sns.heatmap(miss, cmap=['#BDBDBD', '#d62728'], 
+        sns.heatmap(miss, cmap=['#BDBDBD', '#d62728'],
                    cbar=False, yticklabels=False)
         ax.set_title(f"All data (missing: {total_missing})")
         plt.xticks(rotation=45)
         plt.tight_layout()
         plt.show()
-        
+
         print("Пропуски по столбцам:")
         print(df.isna().sum())
 
@@ -387,7 +387,7 @@ def smart_imputer(df: pd.DataFrame,
 
 # +-----------------------------------------------------------------------------
 # Data transformers
- 
+
 def factor_transformer(data_frame: pd.DataFrame,
                        min_factor_levels: int = 7) -> pd.DataFrame:
     """
@@ -428,7 +428,7 @@ def factor_transformer(data_frame: pd.DataFrame,
 #         missing_df['Miss_abs_counts']
 #     missing_df['Miss_Rates,%'] = missing_df['Miss_abs_counts']/data.shape[0]
 #     missing_df['Valid_Rates,%'] = missing_df['Valid_abs_counts']/data.shape[0]
-#     return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts', 
+#     return(missing_df[['Valid_abs_counts', 'Valid_Rates,%', 'Miss_abs_counts',
 #         'Miss_Rates,%']])
 
 
@@ -457,11 +457,11 @@ def dummification(df, cat_vars):
     tab = pd.DataFrame()
     for col in data:
         tab = pd.concat([dummy_serie(df, col), tab], axis = 1)
-    
+
     tab = tab[tab.columns[::-1]]
     df =df.drop(columns = cat_vars)
     df = pd.concat([df, tab], axis = 1)
-        
+
     return(df)
 
 
@@ -483,7 +483,7 @@ def _table_shapiro(df, digits):
         pd.Series(pvals, name="Тест Ш-У, значимость")
         .round(digits)
         .reset_index()
-        .rename(columns={"index": "Показатель"})
+        .rename(columns={"index": "Фактор"})
     )
 
 
@@ -527,7 +527,7 @@ def summary_all(data: pd.DataFrame, digits: int = 1) -> pd.DataFrame:
         if is_num:
             rows.append(
                 {
-                    "Показатель": col,
+                    "Фактор": col,
                     "Валидные,N": total_n,
                     "Абс,доля,%": "-",
                     "Среднее, ст.откл": _fmt_mean_sd(s, digits),
@@ -541,7 +541,7 @@ def summary_all(data: pd.DataFrame, digits: int = 1) -> pd.DataFrame:
             # header-like line for the variable itself
             rows.append(
                 {
-                    "Показатель": col,
+                    "Фактор": col,
                     "Валидные,N": "NA",
                     "Абс,доля,%": "NA",
                     "Среднее, ст.откл": "NA",
@@ -557,7 +557,7 @@ def summary_all(data: pd.DataFrame, digits: int = 1) -> pd.DataFrame:
                 level_name = str(level)
                 rows.append(
                     {
-                        "Показатель": level_name,
+                        "Фактор": level_name,
                         "Валидные,N": total_n,
                         "Абс,доля,%": _fmt_n_pct(n, total_n, digits),
                         "Среднее, ст.откл": "-",
@@ -571,13 +571,13 @@ def summary_all(data: pd.DataFrame, digits: int = 1) -> pd.DataFrame:
     df = pd.DataFrame(rows)
 
     # 3. Merge with Shapiro p-values → only numeric rows keep the number
-    df = df.merge(shapiro_df, on="Показатель", how="left")
+    df = df.merge(shapiro_df, on="Фактор", how="left")
 
     # 4. Add running index & reorder columns
     df.insert(0, "Индекс", range(1, len(df) + 1))
     final_cols = [
         "Индекс",
-        "Показатель",
+        "Фактор",
         "Валидные,N",
         "Абс,доля,%",
         "Среднее, ст.откл",
@@ -589,53 +589,47 @@ def summary_all(data: pd.DataFrame, digits: int = 1) -> pd.DataFrame:
     return df[final_cols]
 
 
+def _r_fisher_test(cont: pd.DataFrame, simulate: bool, seed: int):
+    """Run Fisher's exact test in R and return p-value."""
+    from rpy2.robjects.packages import importr
+    from rpy2.robjects import default_converter
+
+    converter = default_converter + pandas2ri.converter
+
+    with converter.context():
+        stats_r = importr('stats')
+        r_matrix = pandas2ri.py2rpy(cont)
+
+        if simulate:
+            ro.r(f'set.seed({seed})')
+            result = stats_r.fisher_test(
+                r_matrix,
+                simulate_p_value=True,
+                B=10000
+            )
+        else:
+            result = stats_r.fisher_test(r_matrix)
+
+        # result is an OrderedDict with key 'p.value'
+        return float(result['p.value'][0])
+
+
 def fisher_exact_r(cont: pd.DataFrame, seed=1000) -> tuple[str, float | None]:
     """
     Run Fisher's exact test via R for ANY sized contingency table with sparse cells.
-    Uses simulation for larger tables to avoid computational issues.
-    Parameters
-    ----------
-    cont : pd.DataFrame - contingency table of any size (m × n)
-    seed : int - random seed for reproducibility
-
-    Returns
-    -------
-    (test_name, p_value)
     """
     np.random.seed(seed)
     try:
-        from rpy2.robjects.packages import importr
-        
-        # Используем рабочий паттерн: default_converter + pandas2ri.converter
-        converter = ro.default_converter + pandas2ri.converter
-        
-        with converter.context():
-            stats_r = importr('stats')
-            
-            # Конвертируем DataFrame в R-матрицу через явный вызов py2rpy
-            r_matrix = ro.conversion.get_conversion().py2rpy(cont)
-            
-            # Для таблиц 2xk используем точный метод
-            if cont.shape[0] == 2:
-                result = stats_r.fisher_test(r_matrix)
-                p_value = result[0][0]
-                return "Точный тест Фишера (R)", float(p_value)
-            
-            # Для больших таблиц используем симуляцию Монте-Карло
-            else:
-                ro.r(f'set.seed({seed})')
-                # simulate.p.value=TRUE обязательно для таблиц > 2x2
-                result = stats_r.fisher_test(r_matrix, simulate_p_value=True, B=10000)
-                p_value = result[0][0]
-                return "Точный тест Фишера (R, симуляция)", float(p_value)
-                
-    except Exception as e:
-        print(f"Ошибка при вызове R: {type(e).__name__}: {e}")
-        # Fallback to chi-square with correction
-        from scipy import stats as sp_stats
+        if cont.shape[0] == 2:
+            p = _r_fisher_test(cont, simulate=False, seed=seed)
+            return "Точный тест Фишера (R)", p
+        p = _r_fisher_test(cont, simulate=True, seed=seed)
+        return "Точный тест Фишера (R, симуляция)", p
+    except Exception:
+        # Fallback to chi-square
         try:
             chi2, p_val, *_ = sp_stats.chi2_contingency(cont, correction=True)
-            return f"R не найден/ошибка → Χ²-тест", float(p_val)
+            return "Χ²-тест", float(p_val)
         except:
             return "Ошибка", None
 
@@ -965,7 +959,7 @@ def pairwise_comparisons(
 
         # -------- assemble row -----------------------------------------------
         if not np.isnan(p_raw).all():
-            row = {"id": idx, "Factor": var, **dict(zip(pair_cols, p_raw))}
+            row = {"id": idx, "Фактор": var, **dict(zip(pair_cols, p_raw))}
 
             # adjust if requested
             if p_adjust_method.lower() != "none":
@@ -980,7 +974,7 @@ def pairwise_comparisons(
 
             out_rows.append(row)
             idx += 1
-        
+
 
     return pd.DataFrame(out_rows).round(3)
 
@@ -1297,12 +1291,12 @@ def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
     """AI is creating summary for onedim_coxregr
 
     Args:
-        df: original dataframe 
+        df: original dataframe
         group: death or target column
         time: time column
         adj (bool, optional): do we need to adjust for covariates? Defaults to False.
         adj_cols_lst (List): if adj == True, provide list of covariates for adjustments. Defaults to None.
-    """    
+    """
     columns = [x for x in df.columns if (x != group) and (x != time) ]
 
     coxregr = pd.DataFrame()
@@ -1324,7 +1318,7 @@ def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
 
             coxregr = pd.concat(
                 [coxregr,
-                pd.DataFrame({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, index = [1])], 
+                pd.DataFrame({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, index = [1])],
                     ignore_index=True)
 
         coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
@@ -1345,7 +1339,7 @@ def onedim_coxregr(df, group, time, adj = False, adj_cols_lst = None):
 
             coxregr = pd.concat(
                 [coxregr,
-                pd.DataFrame({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, index = [1])], 
+                pd.DataFrame({'Фактор': df[col].name, 'HR': HR, 'Нижний 95% ДИ': conf0, 'Верхний 95% ДИ': conf1,'p_val': p}, index = [1])],
                     ignore_index=True)
 
         coxregr = coxregr.reindex(columns=['Фактор', 'HR', 'Нижний 95% ДИ', 'Верхний 95% ДИ', 'p_val'])
@@ -1357,7 +1351,7 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
     """AI is creating summary for step_cox
 
     Args:
-        df: original dataframe 
+        df: original dataframe
         group: death or target column
         time: time column
         vars: vars to select from for multivariate model
@@ -1366,7 +1360,7 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
 
     Returns:
         model_tab: multivariate COX model
-    """    
+    """
     var_lst = vars.copy()
 
     pen = .001
@@ -1379,7 +1373,7 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
 
         if index_p_max in var_lst:
             var_lst.remove(index_p_max)
-        
+
         model = cph_selector.fit(df[[group, time] + var_lst].dropna(), duration_col=time, event_col=group)
         p_max = model.summary['p'].max()
 
@@ -1394,18 +1388,18 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
     model_tab.columns = ['Factor', 'HR', 'lower CI',	'upper CI',	'p-val']
     model_tab[['HR', 'lower CI',	'upper CI']] = model_tab[['HR', 'lower CI',	'upper CI']].round(2)
     model_tab[['p-val']] = model_tab[['p-val']].round(3)
-    return model_tab    
+    return model_tab
 
 
 # def onedim_logistic(df, target, adj=False, adj_cols_lst=None):
 #     """AI is creating summary for onedim_logistic_regression
 
 #     Args:
-#         df: original dataframe 
+#         df: original dataframe
 #         target: binary target column (0/1)
 #         adj (bool, optional): do we need to adjust for covariates? Defaults to False.
 #         adj_cols_lst (List): if adj == True, provide list of covariates for adjustments. Defaults to None.
-#     """    
+#     """
 #     columns = [x for x in df.columns if x != target]
 
 #     logreg_results = pd.DataFrame()
@@ -1417,10 +1411,10 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
 #                 # Prepare the data
 #                 X = df[[col] + adj_cols_lst].dropna()
 #                 y = df[target].loc[X.index]
-                
+
 #                 # Fit the logistic regression model
 #                 model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
-                
+
 #                 # Extract coefficients and statistics
 #                 OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
 #                 p = round(model.pvalues[col], 3)          # p-value
@@ -1447,10 +1441,10 @@ def step_cox(df, group, time, vars, iterations = 1000, penalty = .001):
 #                 # Prepare the data
 #                 X = df[[col]].dropna()
 #                 y = df[target].loc[X.index]
-                
+
 #                 # Fit the logistic regression model
 #                 model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
-                
+
 #                 # Extract coefficients and statistics
 #                 OR = round(np.exp(model.params[col]), 2)  # Odds Ratio
 #                 p = round(model.pvalues[col], 3)          # p-value
@@ -1478,7 +1472,7 @@ def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
     """AI is creating summary for step_logistic
 
     Args:
-        df: original dataframe 
+        df: original dataframe
         target: binary target column (0/1)
         vars: variables to select from for multivariate model
         iterations: number of steps. Defaults to 1000.
@@ -1486,7 +1480,7 @@ def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
 
     Returns:
         model_tab: multivariate logistic regression model summary
-    """    
+    """
     var_lst = vars.copy()
     model_results = pd.DataFrame()
 
@@ -1494,10 +1488,10 @@ def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
         # Fit the logistic regression model with current variables
         X = df[var_lst].dropna()
         y = df[target].loc[X.index]
-        
+
         if len(y) == 0:
             break  # Exit if there are no observations
-        
+
         model = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
 
         # Get p-values and find the maximum p-value
@@ -1514,16 +1508,16 @@ def step_logistic(df, target, vars, iterations=1000, threshold=0.05):
 
     # Final model fitting with selected variables
     final_model = sm.Logit(y, sm.add_constant(df[var_lst].dropna())).fit(disp=0)
-    
+
     # Prepare summary table
     model_tab = final_model.summary2().tables[1].reset_index()
     model_tab.columns = ['Factor', 'Coef', 'Std Err', 'z', 'P>|z|', '[0.025', '0.975]']
-    
+
     # Calculate Odds Ratios and Confidence Intervals
     model_tab['OR'] = np.exp(model_tab['Coef'])
     model_tab['lower CI'] = np.exp(model_tab['[0.025'])
     model_tab['upper CI'] = np.exp(model_tab['0.975]'])
-    
+
     # Select relevant columns and round values
     model_tab = model_tab[['Factor', 'OR', 'lower CI', 'upper CI', 'P>|z|']]
     model_tab[['OR', 'lower CI', 'upper CI']] = model_tab[['OR', 'lower CI', 'upper CI']].round(2)
@@ -1567,17 +1561,17 @@ def draw_data_frame(df, col_lst, pict_sav=True):
                 g = sns.barplot(data=B, x=col, y='Доля, %', ax=ax)
                 for p in g.patches:
                     g.annotate(
-                        str(format(p.get_height(), '.1f')) + ' %', 
-                    (p.get_x() + p.get_width() / 2., p.get_height()), 
-                    ha = 'center', va = 'center', 
-                    xytext = (0, 9), 
+                        str(format(p.get_height(), '.1f')) + ' %',
+                    (p.get_x() + p.get_width() / 2., p.get_height()),
+                    ha = 'center', va = 'center',
+                    xytext = (0, 9),
                     textcoords = 'offset points')
                 plt.show()
                 if pict_sav:
                     g.figure.savefig(col  + '.png')
 
             else: pass
-        
+
         else:
             sns.set(style = 'whitegrid')
             fig, (ax_box, ax_hist) = plt.subplots(2, sharex=True, figsize = (7, 7), gridspec_kw={"height_ratios": (.15, .85)})
@@ -1614,10 +1608,10 @@ def draw_data_frame_group(df, col_lst, group, pict_sav=True, add_number=True):
                 g.legend_.set_title(None)
                 for p in g.patches:
                     g.annotate(
-                        str(format(p.get_height(), '.1f')) + (' %'), 
-                    (p.get_x() + p.get_width() / 2., p.get_height()), 
-                    ha = 'center', va = 'center', 
-                    xytext = (0, 9), 
+                        str(format(p.get_height(), '.1f')) + (' %'),
+                    (p.get_x() + p.get_width() / 2., p.get_height()),
+                    ha = 'center', va = 'center',
+                    xytext = (0, 9),
                     textcoords = 'offset points')
 
                 plt.legend(bbox_to_anchor=(1.01, 1),borderaxespad=0)## легенда снаружи
@@ -1634,7 +1628,7 @@ def draw_data_frame_group(df, col_lst, group, pict_sav=True, add_number=True):
                         g.figure.savefig(col  + '.png')
 
             else: pass
-        
+
         else:
             sns.set(style='whitegrid')
             fig, ax = plt.subplots(figsize=(8,8))
@@ -1659,9 +1653,9 @@ def bland_altman_plot(data1, data2, x_label='', y_label='',save=False, name=None
     data1     = np.asarray(data1)
     data2     = np.asarray(data2)
     mean      = np.mean([data1, data2], axis=0)
-    diff      = data1 - data2                   
-    md        = np.mean(diff)                   
-    sd        = np.std(diff, axis=0)            
+    diff      = data1 - data2
+    md        = np.mean(diff)
+    sd        = np.std(diff, axis=0)
 
     fig, ax = plt.subplots(figsize=(10,6))
     g=sns.scatterplot(mean, diff, *args, **kwargs, color='g')
@@ -1674,7 +1668,7 @@ def bland_altman_plot(data1, data2, x_label='', y_label='',save=False, name=None
         g.figure.savefig(name  + '.png')
 
 
-## Polar Circular Plot 
+## Polar Circular Plot
 
 def polar_plot_circular(
     df,
@@ -1710,7 +1704,7 @@ def polar_plot_circular(
     max = 1
     slope = (max - lowerLimit) / max
     coeff = (slope * 1)/25
-    nstart = 0.2 
+    nstart = 0.2
     cols = cols
     id = df[id_var]
 
@@ -1736,15 +1730,15 @@ def polar_plot_circular(
 
         # Draw bars
         bars = ax.bar(
-            x=angles, 
-            height=heights, 
-            width=width, 
+            x=angles,
+            height=heights,
+            width=width,
             bottom=bot,
-            linewidth=2, 
+            linewidth=2,
             color = '#dedede',
-            edgecolor="white", 
+            edgecolor="white",
             alpha=0.5, label=fill_color)
-        
+
 
     #### Plot ###############################
 
@@ -1763,11 +1757,11 @@ def polar_plot_circular(
 
         # Draw bars
         bars = ax.bar(
-            x=angles, 
-            height=heights, 
-            width=width, 
+            x=angles,
+            height=heights,
+            width=width,
             bottom=bot,
-            linewidth=2, 
+            linewidth=2,
             color = color,
             edgecolor="white",
             label=col)
@@ -1788,11 +1782,11 @@ def polar_plot_circular(
 
         # Draw bars
         bars = ax.bar(
-            x=angles, 
-            height=heights, 
-            width=width, 
+            x=angles,
+            height=heights,
+            width=width,
             bottom=bot,
-            linewidth=2, 
+            linewidth=2,
             color = 'darkgray',
             edgecolor="white",
             label=labelz
@@ -1812,19 +1806,19 @@ def polar_plot_circular(
         if angle >= np.pi/2 and angle < 3*np.pi/2:
             alignment = "right"
             rotation = rotation + 180
-        else: 
+        else:
             alignment = "left"
 
         # Finally add the labels
         ax.text(
-            x=angle, 
-            y=n[-1] + abs(coeff), 
-            s=label, 
-            ha=alignment, 
-            va='center', 
-            rotation=rotation, 
+            x=angle,
+            y=n[-1] + abs(coeff),
+            s=label,
+            ha=alignment,
+            va='center',
+            rotation=rotation,
             rotation_mode="anchor")
-    
+
     ax = plt.gca()
     ax.set_facecolor('xkcd:white')
     plt.rcParams['figure.facecolor'] = 'white'
@@ -1834,4 +1828,3 @@ def polar_plot_circular(
 
     if save:
         plt.savefig(figname + ".png")
-
